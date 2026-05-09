@@ -4,6 +4,7 @@ import { maskSecret, resolveConfig, type PiListensConfig } from "./config.js";
 import { SarvamSpeechClient } from "./sarvam.js";
 import { attachStateToServices, maybeContinueVoiceLoop, registerVoiceCommands, stopVoiceMode, updateServiceContext, type VoiceModeState } from "./commands.js";
 import { registerVoiceTools, type VoiceToolServices } from "./tools.js";
+import { applyVoiceChrome } from "./voice-ui.js";
 
 export default function piListensExtension(pi: ExtensionAPI) {
 	let config: PiListensConfig = resolveConfig(process.cwd());
@@ -16,6 +17,8 @@ export default function piListensExtension(pi: ExtensionAPI) {
 		autoListen: false,
 		isListening: false,
 		status: "idle",
+		agentActive: false,
+		activeSpeechCount: 0,
 		recordSeconds: config.recordSeconds,
 		silenceStopSeconds: config.silenceStopSeconds,
 	};
@@ -68,7 +71,16 @@ export default function piListensExtension(pi: ExtensionAPI) {
 	});
 
 
+	pi.on("agent_start", async (_event, ctx) => {
+		state.agentActive = true;
+		if (state.enabled && state.status === "idle") {
+			state.status = "agent";
+			applyVoiceChrome(ctx, state);
+		}
+	});
+
 	pi.on("agent_end", async (_event, ctx) => {
+		state.agentActive = false;
 		updateServiceContext(services, ctx);
 		await maybeContinueVoiceLoop(pi, services, state, ctx);
 	});
