@@ -8,13 +8,15 @@ import { conciseTranscript } from "./text.js";
 import { audioExtensionForCodec, maskSecret } from "./config.js";
 import { applyVoiceChrome, installVoiceUi, uninstallVoiceUi } from "./voice-ui.js";
 
-export type VoiceLoopStatus = "idle" | "listening" | "transcribing" | "agent" | "speaking" | "error";
+export type VoiceLoopStatus = "idle" | "listening" | "agent" | "speaking" | "error";
 
 export interface VoiceModeState {
 	enabled: boolean;
 	autoListen: boolean;
 	isListening: boolean;
 	status: VoiceLoopStatus;
+	agentActive: boolean;
+	activeSpeechCount: number;
 	uiInstalled?: boolean;
 	previousEditorFactory?: unknown;
 	lastTranscript?: string;
@@ -302,6 +304,7 @@ function stopSpeaking(services: VoiceToolServices, state: VoiceModeState) {
 	const speakAbortController = state.speakAbortController;
 	state.speakAbortController = undefined;
 	speakAbortController?.abort();
+	services.resetSpeechCount?.();
 	services.getAudio().interruptPlayback();
 }
 
@@ -333,7 +336,8 @@ export function attachStateToServices(services: VoiceToolServices, state: VoiceM
 		if (speaking) {
 			state.status = "speaking";
 		} else if (state.status === "speaking") {
-			state.status = "idle";
+			// Go back to agent-working if still mid-turn, idle otherwise
+			state.status = state.agentActive ? "agent" : "idle";
 		}
 		const ctx = serviceCtx.get(services);
 		if (ctx) applyVoiceChrome(ctx, state);

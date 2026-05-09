@@ -14,6 +14,7 @@ export interface VoiceToolServices {
 	getAudio: () => AudioRuntime;
 	getSpeech: () => SarvamSpeechClient;
 	notifySpeaking?: (speaking: boolean) => void;
+	resetSpeechCount?: () => void;
 }
 
 const VoiceOutputParams = Type.Object({
@@ -44,6 +45,9 @@ type VoiceAskInput = { question: string; seconds?: number; text_fallback?: boole
 type VoiceTranscribeInput = { path: string };
 
 export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices) {
+	let activeSpeechCount = 0;
+	services.resetSpeechCount = () => { activeSpeechCount = 0; };
+
 	pi.registerTool({
 		name: "voice_output",
 		label: "Voice Output",
@@ -56,14 +60,19 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {
 			const audio = services.getAudio();
+			activeSpeechCount++;
 			services.notifySpeaking?.(true);
 			onUpdate?.({ content: [{ type: "text", text: "Starting streamed speech with Sarvam AI…" }], details: {} });
 			let playbackDetails: Record<string, unknown> = {};
 			const playback = audio.enqueuePlayback(async () => {
 				playbackDetails = await playSpeechBest(params.text, services, signal);
 			});
+			const onPlaybackDone = () => {
+				activeSpeechCount = Math.max(0, activeSpeechCount - 1);
+				if (activeSpeechCount === 0) services.notifySpeaking?.(false);
+			};
 			if (params.wait_for_playback !== true) {
-				void playback.then(() => services.notifySpeaking?.(false), () => services.notifySpeaking?.(false));
+				void playback.then(onPlaybackDone, onPlaybackDone);
 				return {
 					content: [{ type: "text", text: `Started speaking to user: ${params.text}` }],
 					details: { played: "started", text: params.text },
@@ -77,7 +86,7 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 					details: { ...playbackDetails, played: true, text: params.text },
 				};
 			} finally {
-				services.notifySpeaking?.(false);
+				onPlaybackDone();
 			}
 		},
 		renderCall(args: VoiceOutputInput, theme) {

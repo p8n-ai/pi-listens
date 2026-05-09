@@ -182,7 +182,6 @@ function compactStatus(status: VoiceModeState["status"], palette: OrbPalette, fr
 	const labels: Record<VoiceModeState["status"], string> = {
 		idle: "ready",
 		listening: "listening",
-		transcribing: "English",
 		agent: "working",
 		speaking: "speaking",
 		error: "attention",
@@ -196,8 +195,6 @@ function paletteForStatus(status: VoiceModeState["status"]): OrbPalette {
 	switch (status) {
 		case "listening":
 			return { fg: "38;2;80;220;255", bright: "38;2;180;245;255", soft: "38;2;50;140;255", dim: "38;2;24;75;130" };
-		case "transcribing":
-			return { fg: "38;2;255;209;102", bright: "38;2;255;238;170", soft: "38;2;245;158;11", dim: "38;2;120;83;25" };
 		case "agent":
 			return { fg: "38;2;167;139;250", bright: "38;2;216;180;254", soft: "38;2;124;58;237", dim: "38;2;76;29;149" };
 		case "speaking":
@@ -233,14 +230,13 @@ function animatedGlowingOrb(palette: OrbPalette, status: VoiceModeState["status"
 
 			const radial = Math.max(0, 1 - ellipse);
 			const rim = Math.max(0, 1 - Math.abs(ellipse - 0.74) * 5.0);
-			const sweep = status === "transcribing" ? Math.max(0, 1 - Math.abs(nx - ((frame % 28) / 14 - 1)) * 2.8) : 0;
 			const listeningRipple = status === "listening" ? 0.22 * Math.sin(18 * ellipse - t * 3.3) : 0;
 			const speakingWave = status === "speaking" ? 0.2 * Math.sin(x * 0.65 + t * 3.8) : 0;
 			const thinkingSwirl = status === "agent" ? 0.18 * Math.sin(Math.atan2(ny, nx) * 3 + t * 2.2) : 0;
 			const highlight = Math.max(0, 1 - Math.hypot(nx + 0.32 * Math.cos(t), ny - 0.28 * Math.sin(t * 0.8)) * 2.2);
 			const click = sampleClickEffect(nx, ny, frame, shockwaves);
 
-			let intensity = radial * 1.25 + rim * 0.5 + highlight * 0.42 + sweep * 0.45 + listeningRipple + speakingWave + thinkingSwirl;
+			let intensity = radial * 1.25 + rim * 0.5 + highlight * 0.42 + listeningRipple + speakingWave + thinkingSwirl;
 			intensity = clamp01(intensity + click.ring * 0.92 + click.bloom * 0.52 - click.dent * 0.22);
 			const charIndex = Math.max(0, Math.min(chars.length - 1, Math.round(intensity * (chars.length - 1))));
 			const ch = chars[charIndex] ?? " ";
