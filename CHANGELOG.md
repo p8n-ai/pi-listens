@@ -6,6 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Stream TTS audio directly to the local player so speech starts sooner.
+- Make `voice_output` non-blocking by default; pass `wait_for_playback: true` to wait.
+- Replace the `R` voice-panel shortcut with Space for easier listen/stop control.
+
 ## [0.1.1] - 2026-05-09
 
 ### Fixed

@@ -1,7 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, type StdioOptions } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { once } from "node:events";
 import type { PiListensConfig } from "./config.js";
@@ -10,15 +10,17 @@ export interface AudioRuntime {
 	record(seconds?: number, signal?: AbortSignal): Promise<string>;
 	streamPcm(signal?: AbortSignal): AsyncIterable<Buffer>;
 	play(path: string, signal?: AbortSignal): Promise<void>;
+	playStream(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): Promise<void>;
 	cleanup(path: string): Promise<void>;
 	stopPlayback(): void;
 	stopAll(): void;
-	describe(): { recorder: string; player: string };
+	describe(): { recorder: string; player: string; streamingPlayer: string };
 }
 
 export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 	const recorder = config.recordCommand ? "custom" : detectRecorder();
 	const player = config.playCommand ? "custom" : detectPlayer();
+	const streamingPlayer = detectStreamingPlayer();
 
 	return {
 		async record(seconds = config.recordSeconds, signal?: AbortSignal): Promise<string> {
@@ -68,6 +70,16 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 			await run(command.command, command.args, signal, { kind: "play" });
 		},
 
+		async playStream(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): Promise<void> {
+			if (!streamingPlayer) {
+				throw new Error(
+					"No streaming audio player found. Install ffplay or sox (`play`) for low-latency TTS playback, or use file playback fallback.",
+				);
+			}
+			const command = streamingPlayerCommand(streamingPlayer, config.ttsOutputCodec, config.ttsSampleRate);
+			await pipeStreamToCommand(stream, command.command, command.args, signal);
+		},
+
 		async cleanup(path: string): Promise<void> {
 			if (!config.deleteAudio) return;
 			await rm(path, { force: true }).catch(() => undefined);
@@ -82,7 +94,7 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 		},
 
 		describe() {
-			return { recorder: recorder ?? "missing", player: player ?? "missing" };
+			return { recorder: recorder ?? "missing", player: player ?? "missing", streamingPlayer: streamingPlayer ?? "missing" };
 		},
 	};
 }
@@ -205,6 +217,13 @@ function detectPlayer(): string | null {
 	return null;
 }
 
+function detectStreamingPlayer(): string | null {
+	if (isCommandAvailable("ffplay")) return "ffplay";
+	if (isCommandAvailable("play")) return "play";
+	if (isCommandAvailable("aplay")) return "aplay";
+	return null;
+}
+
 function isCommandAvailable(command: string): boolean {
 	const paths = (process.env.PATH ?? "").split(":").filter(Boolean);
 	for (const dir of paths) {
@@ -303,6 +322,76 @@ async function* streamCommandOutput(command: string, args: string[], signal?: Ab
 	}
 }
 
+async function pipeStreamToCommand(stream: ReadableStream<Uint8Array>, command: string, args: string[], signal?: AbortSignal): Promise<void> {
+	if (signal?.aborted) throw new Error("Cancelled");
+	const child = spawnManaged(command, args, "play", ["pipe", "pipe", "pipe"]);
+	let stderr = "";
+	let stdout = "";
+	let exitCode: number | null = null;
+	let exitSignal: NodeJS.Signals | null = null;
+	let spawnError: Error | undefined;
+
+	const stop = () => terminateChild(child);
+	signal?.addEventListener("abort", stop, { once: true });
+	child.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
+	child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
+	child.on("error", (err) => { spawnError = err; });
+	child.on("close", (code, termSignal) => { exitCode = code; exitSignal = termSignal; });
+
+	try {
+		if (!child.stdin) throw new Error(`${command} did not provide stdin for streaming audio playback`);
+		const stdin = child.stdin;
+		const reader = stream.getReader();
+		try {
+			while (true) {
+				if (signal?.aborted) throw new Error("Cancelled");
+				if (spawnError) throw spawnError;
+				const { done, value } = await reader.read();
+				if (done) break;
+				if (!value?.byteLength) continue;
+				if (!stdin.write(Buffer.from(value))) await once(stdin, "drain");
+			}
+		} finally {
+			reader.releaseLock();
+		}
+		stdin.end();
+		if (exitCode === null && !spawnError) await once(child, "close");
+		if (signal?.aborted) throw new Error("Cancelled");
+		if (spawnError) throw spawnError;
+		if (exitCode !== 0) {
+			const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+			throw new Error(`${command} failed${exitSignal ? ` (${exitSignal})` : ""}${exitCode === null ? "" : ` with exit code ${exitCode}`}${output ? `: ${output}` : ""}`);
+		}
+	} finally {
+		signal?.removeEventListener("abort", stop);
+		if (!child.killed && exitCode === null) stop();
+	}
+}
+
+function streamingPlayerCommand(player: string, codec: PiListensConfig["ttsOutputCodec"], sampleRate: number): CommandSpec {
+	if (player === "ffplay") {
+		const args = ["-nodisp", "-autoexit", "-loglevel", "error"];
+		if (codec === "linear16") args.push("-f", "s16le", "-ar", String(sampleRate), "-ac", "1");
+		if (codec === "mulaw") args.push("-f", "mulaw", "-ar", String(sampleRate), "-ac", "1");
+		if (codec === "alaw") args.push("-f", "alaw", "-ar", String(sampleRate), "-ac", "1");
+		args.push("-i", "pipe:0");
+		return { command: "ffplay", args };
+	}
+	if (player === "play") {
+		if (codec === "linear16") return { command: "play", args: ["-q", "-r", String(sampleRate), "-c", "1", "-b", "16", "-e", "signed-integer", "-t", "raw", "-"] };
+		if (codec === "mulaw" || codec === "alaw") return { command: "play", args: ["-q", "-r", String(sampleRate), "-c", "1", "-t", codec, "-"] };
+		return { command: "play", args: ["-q", "-t", soxTypeForCodec(codec), "-"] };
+	}
+	if (player === "aplay" && codec === "wav") return { command: "aplay", args: ["-q", "-"] };
+	throw new Error(`Unsupported streaming player ${player} for codec ${codec}`);
+}
+
+function soxTypeForCodec(codec: PiListensConfig["ttsOutputCodec"]): string {
+	if (codec === "aac") return "adts";
+	if (codec === "linear16") return "raw";
+	return codec;
+}
+
 type AudioProcessKind = "record" | "play" | "other";
 
 type ManagedChild = ReturnType<typeof spawn>;
@@ -318,10 +407,10 @@ export function stopActiveAudioProcesses(options: { kind?: AudioProcessKind; for
 	}
 }
 
-function spawnManaged(command: string, args: string[], kind: AudioProcessKind): ManagedChild {
+function spawnManaged(command: string, args: string[], kind: AudioProcessKind, stdio: StdioOptions = ["ignore", "pipe", "pipe"]): ManagedChild {
 	installProcessExitCleanup();
 	const child = spawn(command, args, {
-		stdio: ["ignore", "pipe", "pipe"],
+		stdio,
 		detached: process.platform !== "win32",
 	});
 	activeChildren.add(child);

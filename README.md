@@ -95,7 +95,7 @@ The extension also injects voice guidance into the system prompt:
 | `/voice-status` | Show setup and voice-mode status. |
 
 Voice panel controls in interactive mode:
-- R: listen now; press again while listening to stop listening; if Pi is speaking, R stops playback before listening
+- Space: listen now; press again while listening to stop listening; if Pi is speaking, Space stops playback before listening
 - A: auto-listen on/off (listen again after each assistant reply)
 - S: read aloud on/off (speak assistant replies)
 - Q: close the panel and stop any active listening or speaking

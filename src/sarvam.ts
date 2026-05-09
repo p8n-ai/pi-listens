@@ -15,6 +15,10 @@ export interface SynthesisResult {
 	bytes: number;
 }
 
+export interface SynthesisStreamResult {
+	stream: ReadableStream<Uint8Array>;
+}
+
 type StreamingData = {
 	transcript?: string;
 	request_id?: string;
@@ -125,6 +129,28 @@ export class SarvamSpeechClient {
 		const buffer = Buffer.from(arrayBuffer);
 		await writeFile(path, buffer);
 		return { path, bytes: buffer.byteLength };
+	}
+
+	async synthesizeStream(text: string, signal?: AbortSignal): Promise<SynthesisStreamResult> {
+		const config = this.getConfig();
+		const client = this.getClient(config);
+		const response = await client.textToSpeech.convertStream(
+			{
+				text,
+				target_language_code: config.ttsLanguageCode as never,
+				speaker: config.ttsSpeaker as never,
+				model: config.ttsModel as never,
+				pace: config.ttsPace,
+				temperature: config.ttsTemperature,
+				speech_sample_rate: config.ttsSampleRate as never,
+				enable_preprocessing: true,
+				output_audio_codec: config.ttsOutputCodec as never,
+			},
+			{ abortSignal: signal },
+		);
+		const stream = response.stream();
+		if (!stream) throw new Error("Sarvam TTS response did not include a readable audio stream");
+		return { stream };
 	}
 
 	private async withStreamingSocket(

@@ -88,7 +88,7 @@ class VoiceLoopEditor extends CustomEditor {
 			if (mouse.pressed && mouse.button === 0) this.triggerMouseOrbClick(mouse);
 			return;
 		}
-		if (data.toLowerCase() === "r") {
+		if (data === " ") {
 			this.triggerOrbClick(1);
 			this.callbacks.startListening();
 			return;
@@ -309,7 +309,7 @@ function frameIntervalForStatus(status: VoiceModeState["status"]): number {
 function controlRail(state: VoiceModeState, palette: OrbPalette, width: number): string[] {
 	const listenLabel = state.isListening ? "stop" : "listen";
 	const pills = [
-		controlPill("R", listenLabel, state.isListening ? "active" : "primary", palette),
+		controlPill("Space", listenLabel, state.isListening ? "active" : "primary", palette),
 		controlPill("A", state.autoListen ? "auto-listen on" : "auto-listen off", state.autoListen ? "active" : "muted", palette),
 		controlPill("S", state.autoSpeakAssistant ? "read aloud on" : "read aloud off", state.autoSpeakAssistant ? "active" : "muted", palette),
 		controlPill("Q", "close", "danger", palette),

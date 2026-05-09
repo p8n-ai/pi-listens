@@ -74,6 +74,7 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 					`Sarvam API key: ${config.apiKey ? "set" : "missing"}`,
 					`Recorder: ${audio.recorder}`,
 					`Player: ${audio.player}`,
+					`Streaming player: ${audio.streamingPlayer}`,
 					`STT: ${config.sttModel} (${config.translateInputToEnglish ? "translate→English" : config.sttMode}, ${config.sttLanguageCode})`,
 					`TTS: ${config.ttsModel} (${config.ttsLanguageCode}, speaker ${config.ttsSpeaker})`,
 				].join("\n"),
@@ -177,10 +178,8 @@ async function listenAndSend(
 }
 
 async function speakText(services: VoiceToolServices, text: string, signal?: AbortSignal, state?: VoiceModeState, ctx?: ExtensionContext) {
-	const config = services.getConfig();
 	const speakAbortController = state ? new AbortController() : undefined;
 	const speakSignal = combineSignals(signal, speakAbortController?.signal);
-	let path: string | undefined;
 
 	if (state) {
 		state.speakAbortController?.abort();
@@ -190,19 +189,33 @@ async function speakText(services: VoiceToolServices, text: string, signal?: Abo
 	}
 
 	try {
-		await mkdir(config.audioDir, { recursive: true });
-		path = join(config.audioDir, `pi-listens-command-${Date.now()}.${audioExtensionForCodec(config.ttsOutputCodec)}`);
-		const result = await services.getSpeech().synthesizeToFile(text, path, speakSignal.signal);
-		path = result.path;
-		await services.getAudio().play(result.path, speakSignal.signal);
+		await playSpeechBest(services, text, speakSignal.signal);
 	} finally {
 		speakSignal.cleanup();
-		if (path) await services.getAudio().cleanup(path);
 		if (state && state.speakAbortController === speakAbortController) state.speakAbortController = undefined;
 		if (state && state.status === "speaking") {
 			state.status = "idle";
 			if (ctx) applyVoiceChrome(ctx, state);
 		}
+	}
+}
+
+async function playSpeechBest(services: VoiceToolServices, text: string, signal?: AbortSignal) {
+	const audio = services.getAudio();
+	if (audio.describe().streamingPlayer !== "missing") {
+		const result = await services.getSpeech().synthesizeStream(text, signal);
+		await audio.playStream(result.stream, signal);
+		return;
+	}
+
+	const config = services.getConfig();
+	await mkdir(config.audioDir, { recursive: true });
+	const path = join(config.audioDir, `pi-listens-command-${Date.now()}.${audioExtensionForCodec(config.ttsOutputCodec)}`);
+	try {
+		const result = await services.getSpeech().synthesizeToFile(text, path, signal);
+		await audio.play(result.path, signal);
+	} finally {
+		await audio.cleanup(path);
 	}
 }
 

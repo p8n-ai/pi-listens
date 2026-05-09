@@ -17,7 +17,7 @@ export interface VoiceToolServices {
 
 const VoiceOutputParams = Type.Object({
 	text: Type.String({ description: "Short text to speak to the user. Keep it concise; do not speak code blocks or long logs." }),
-	wait_for_playback: Type.Optional(Type.Boolean({ description: "Wait until audio playback completes before returning. Default true." })),
+	wait_for_playback: Type.Optional(Type.Boolean({ description: "Wait until audio playback completes before returning. Default false." })),
 });
 
 const VoiceInputParams = Type.Object({
@@ -54,21 +54,20 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		],
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {
-			onUpdate?.({ content: [{ type: "text", text: "Synthesizing speech with Sarvam AI…" }], details: {} });
-			const result = await speak(params.text, services, signal);
-			const playback = services.getAudio().play(result.path, signal).finally(() => services.getAudio().cleanup(result.path));
-			if (params.wait_for_playback === false) {
+			onUpdate?.({ content: [{ type: "text", text: "Starting streamed speech with Sarvam AI…" }], details: {} });
+			const playback = playSpeechBest(params.text, services, signal);
+			if (params.wait_for_playback !== true) {
 				void playback.catch(() => undefined);
 				return {
 					content: [{ type: "text", text: `Started speaking to user: ${params.text}` }],
-					details: { ...result, played: "started", text: params.text },
+					details: { played: "started", text: params.text },
 				};
 			}
 			onUpdate?.({ content: [{ type: "text", text: "Playing audio…" }], details: {} });
-			await playback;
+			const details = await playback;
 			return {
 				content: [{ type: "text", text: `Spoke to user: ${params.text}` }],
-				details: { ...result, played: true, text: params.text },
+				details: { ...details, played: true, text: params.text },
 			};
 		},
 		renderCall(args: VoiceOutputInput, theme) {
@@ -117,12 +116,7 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		parameters: VoiceAskParams,
 		async execute(_toolCallId, params: VoiceAskInput, signal, onUpdate, ctx) {
 			onUpdate?.({ content: [{ type: "text", text: "Speaking question…" }], details: {} });
-			const spoken = await speak(params.question, services, signal);
-			try {
-				await services.getAudio().play(spoken.path, signal);
-			} finally {
-				await services.getAudio().cleanup(spoken.path);
-			}
+			await playSpeechBest(params.question, services, signal);
 			const answer = await listenAndMaybeFallback(
 				params,
 				services,
@@ -173,6 +167,7 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 							`Sarvam API key: ${config.apiKey ? "set" : "missing"}`,
 							`Recorder: ${audio.recorder}`,
 							`Player: ${audio.player}`,
+							`Streaming player: ${audio.streamingPlayer}`,
 							`STT: ${config.sttModel} (${config.translateInputToEnglish ? "translate→English" : config.sttMode}, ${config.sttLanguageCode})`,
 							`TTS: ${config.ttsModel} (${config.ttsLanguageCode}, speaker ${config.ttsSpeaker})`,
 						].join("\n"),
@@ -184,7 +179,24 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 	});
 }
 
-async function speak(text: string, services: VoiceToolServices, signal?: AbortSignal) {
+async function playSpeechBest(text: string, services: VoiceToolServices, signal?: AbortSignal): Promise<Record<string, unknown>> {
+	const audio = services.getAudio();
+	if (audio.describe().streamingPlayer !== "missing") {
+		const result = await services.getSpeech().synthesizeStream(text, signal);
+		await audio.playStream(result.stream, signal);
+		return { playback: "stream" };
+	}
+
+	const result = await speakToFile(text, services, signal);
+	try {
+		await audio.play(result.path, signal);
+		return { ...result, playback: "file" };
+	} finally {
+		await audio.cleanup(result.path);
+	}
+}
+
+async function speakToFile(text: string, services: VoiceToolServices, signal?: AbortSignal) {
 	const config = services.getConfig();
 	await mkdir(config.audioDir, { recursive: true });
 	const path = join(config.audioDir, `pi-listens-output-${Date.now()}-${randomUUID()}.${audioExtensionForCodec(config.ttsOutputCodec)}`);
