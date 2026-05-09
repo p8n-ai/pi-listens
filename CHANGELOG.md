@@ -6,6 +6,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `/init` command to create a global settings file (`~/.pi/pi-listens.json`) with sensible defaults.
+- `/voice-check` command (replaces `/voice-status`) with improved diagnostic output.
+
+### Changed
+
+- `/voice-on` now enables auto-speak by default for a full hands-free experience. Use `--no-speak` to opt out.
+- Rename `/voice-status` to `/voice-check` to better communicate its diagnostic purpose.
+
+### Removed
+
+- `/listen` slash command. Use `/voice-on` for the hands-free voice loop, or the `voice_input` agent tool for programmatic speech input.
 ## [0.1.2] - 2026-05-09
 
 ### Changed

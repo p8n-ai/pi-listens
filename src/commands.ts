@@ -1,9 +1,11 @@
-import { mkdir } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { VoiceToolServices } from "./tools.js";
 import { conciseTranscript, prepareSpokenText } from "./text.js";
-import { audioExtensionForCodec } from "./config.js";
+import { audioExtensionForCodec, maskSecret } from "./config.js";
 import { applyVoiceChrome, installVoiceUi, uninstallVoiceUi } from "./voice-ui.js";
 
 export type VoiceLoopStatus = "idle" | "listening" | "transcribing" | "agent" | "speaking" | "error";
@@ -26,10 +28,10 @@ export interface VoiceModeState {
 }
 
 export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServices, state: VoiceModeState) {
-	pi.registerCommand("listen", {
-		description: "Record speech, transcribe with Sarvam AI, and send it to pi as a user message",
+	pi.registerCommand("init", {
+		description: "Create a global pi-listens settings file at ~/.pi/pi-listens.json with sensible defaults",
 		handler: async (args, ctx) => {
-			await listenAndSend(pi, services, ctx, parseSeconds(args));
+			await initSettings(services, ctx, args.includes("--overwrite"));
 		},
 	});
 
@@ -46,11 +48,10 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 	});
 
 	pi.registerCommand("voice-on", {
-		description: "Enable hands-free voice loop. Use --speak to read short assistant replies aloud.",
+		description: "Enable hands-free voice loop with auto-speak and auto-listen. Use --no-speak to disable reading replies aloud, --manual to only listen on demand.",
 		handler: async (args, ctx) => {
 			state.enabled = true;
-			if (args.includes("--speak")) state.autoSpeakAssistant = true;
-			if (args.includes("--no-speak")) state.autoSpeakAssistant = false;
+			state.autoSpeakAssistant = !args.includes("--no-speak");
 			state.autoListen = !args.includes("--manual");
 			installVoiceUi(ctx, state, createVoiceUiCallbacks(pi, services, state, ctx));
 			applyVoiceChrome(ctx, state);
@@ -60,30 +61,97 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 	});
 
 
-	pi.registerCommand("voice-status", {
-		description: "Show pi-listens Sarvam AI, recorder, player, and voice-mode status",
+	pi.registerCommand("voice-check", {
+		description: "Check pi-listens setup: Sarvam AI key, recorder, player, and voice-mode status",
 		handler: async (_args, ctx) => {
 			const config = services.getConfig();
 			const audio = services.getAudio().describe();
+			const ready = Boolean(config.apiKey) && audio.recorder !== "missing" && audio.player !== "missing";
 			ctx.ui.notify(
 				[
-					`Voice mode: ${state.enabled ? "on" : "off"}`,
-					`Auto-speak assistant: ${state.autoSpeakAssistant ? "on" : "off"}`,
-					`Auto-listen: ${state.autoListen ? "on" : "off"}`,
-					`Status: ${state.status}`,
-					`Sarvam API key: ${config.apiKey ? "set" : "missing"}`,
+					ready ? "✓ pi-listens is ready." : "⚠ pi-listens needs attention.",
+					"",
+					`Sarvam API key: ${maskSecret(config.apiKey)}`,
 					`Recorder: ${audio.recorder}`,
 					`Player: ${audio.player}`,
 					`Streaming player: ${audio.streamingPlayer}`,
 					`STT: ${config.sttModel} (${config.translateInputToEnglish ? "translate→English" : config.sttMode}, ${config.sttLanguageCode})`,
 					`TTS: ${config.ttsModel} (${config.ttsLanguageCode}, speaker ${config.ttsSpeaker})`,
+					"",
+					`Voice mode: ${state.enabled ? "on" : "off"}`,
+					`Auto-speak: ${state.autoSpeakAssistant ? "on" : "off"}`,
+					`Auto-listen: ${state.autoListen ? "on" : "off"}`,
 				].join("\n"),
-				config.apiKey && audio.recorder !== "missing" && audio.player !== "missing" ? "info" : "warning",
+				ready ? "info" : "warning",
 			);
 		},
 	});
 }
 
+const INIT_SETTINGS_TEMPLATE = {
+	apiKey: "paste-your-sarvam-api-key-here",
+	sttModel: "saaras:v3",
+	sttMode: "transcribe",
+	sttLanguageCode: "unknown",
+	translateInputToEnglish: true,
+	ttsModel: "bulbul:v3",
+	ttsLanguageCode: "en-IN",
+	ttsSpeaker: "shubh",
+	recordSeconds: 300,
+	recordSampleRate: 16000,
+	streamChunkMs: 250,
+	streamMaxSeconds: 300,
+	silenceStartSeconds: 0.2,
+	silenceStopSeconds: 3.5,
+	silenceThreshold: "1%",
+	ttsSampleRate: 24000,
+	ttsOutputCodec: "wav",
+	textFallback: true,
+	autoSpeakAssistant: true,
+	maxAutoSpeakChars: 320,
+};
+
+async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandContext, overwrite: boolean) {
+	const dir = join(homedir(), ".pi");
+	const filePath = join(dir, "pi-listens.json");
+
+	if (existsSync(filePath) && !overwrite) {
+		const existing = readFileSync(filePath, "utf8");
+		let parsed: Record<string, unknown> = {};
+		try { parsed = JSON.parse(existing) as Record<string, unknown>; } catch { /* ignore */ }
+		const hasKey = typeof parsed.apiKey === "string" && parsed.apiKey !== "paste-your-sarvam-api-key-here" && parsed.apiKey.length > 0;
+		ctx.ui.notify(
+			[
+				`Settings file already exists: ${filePath}`,
+				hasKey ? "Sarvam API key: set" : "Sarvam API key: not yet configured",
+				"",
+				"Use /init --overwrite to replace it with fresh defaults.",
+			].join("\n"),
+			"info",
+		);
+		return;
+	}
+
+	await mkdir(dir, { recursive: true });
+	await writeFile(filePath, `${JSON.stringify(INIT_SETTINGS_TEMPLATE, null, 2)}\n`, "utf8");
+
+	const audio = services.getAudio().describe();
+	ctx.ui.notify(
+		[
+			`✓ Created settings file: ${filePath}`,
+			"",
+			"Next step: open the file and replace the apiKey value with your Sarvam AI API key.",
+			"Get a key at: https://dashboard.sarvam.ai",
+			"",
+			`Recorder: ${audio.recorder}`,
+			`Player: ${audio.player}`,
+			audio.recorder === "missing" || audio.player === "missing"
+				? "⚠ Install SoX (rec/play) or ffmpeg for microphone and audio playback."
+				: "✓ Audio recorder and player detected.",
+		].join("\n"),
+		"info",
+	);
+}
 export async function maybeContinueVoiceLoop(pi: ExtensionAPI, services: VoiceToolServices, state: VoiceModeState, ctx: ExtensionContext) {
 	if (!state.enabled || state.isListening) return;
 	if (state.autoSpeakAssistant && state.lastAssistantText) {
