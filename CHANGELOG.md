@@ -6,6 +6,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-09
+
 ### Changed
 
 - Stream TTS audio directly to the local player so speech starts sooner.
@@ -37,6 +39,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Stop active audio capture/playback subprocesses when voice mode is closed or the Pi session shuts down.
 - Clean up generated audio files when spoken playback is interrupted.
 
-[Unreleased]: https://github.com/p8n-ai/pi-listens/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/p8n-ai/pi-listens/compare/v0.1.2...HEAD
 [0.1.0]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.1.0
 [0.1.1]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.1.1
+[0.1.2]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.1.2
