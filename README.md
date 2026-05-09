@@ -112,6 +112,16 @@ Voice panel controls in interactive mode:
 - Q: close the panel and stop any active listening or speaking
 - Click the orb: visual ripple feedback (terminals with mouse reporting)
 
+The orb animates to reflect the current state:
+
+| State | Orb Color | Animation | Status Bar |
+| --- | --- | --- | --- |
+| Idle | Teal | Gentle pulse | `voice on` |
+| Listening | Blue | Ripple | `listening…` |
+| Speaking | Pink/Magenta | Wave | `speaking…` |
+| Agent working | Purple | Swirl | `agent working` |
+| Error | Red | — | Shows error message |
+
 ## Headless/RPC behavior
 
 Pi extension tools work in interactive TUI and headless/RPC modes.
