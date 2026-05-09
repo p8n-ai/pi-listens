@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createAudioRuntime, type AudioRuntime } from "./audio.js";
 import { maskSecret, resolveConfig, type PiListensConfig } from "./config.js";
 import { SarvamSpeechClient } from "./sarvam.js";
-import { attachStateToServices, maybeContinueVoiceLoop, registerVoiceCommands, stopVoiceMode, type VoiceModeState } from "./commands.js";
+import { attachStateToServices, maybeContinueVoiceLoop, registerVoiceCommands, stopVoiceMode, updateServiceContext, type VoiceModeState } from "./commands.js";
 import { registerVoiceTools, type VoiceToolServices } from "./tools.js";
 
 export default function piListensExtension(pi: ExtensionAPI) {
@@ -39,6 +39,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		reloadConfig(ctx.cwd);
+		updateServiceContext(services, ctx);
 		const audioInfo = audio.describe();
 		const ready = Boolean(config.apiKey) && audioInfo.recorder !== "missing" && audioInfo.player !== "missing";
 		ctx.ui.setStatus("pi-listens", state.enabled ? "voice on" : ready ? "voice ready" : "voice setup needed");
@@ -68,6 +69,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 
 
 	pi.on("agent_end", async (_event, ctx) => {
+		updateServiceContext(services, ctx);
 		await maybeContinueVoiceLoop(pi, services, state, ctx);
 	});
 

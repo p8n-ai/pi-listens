@@ -323,9 +323,24 @@ export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState
 }
 
 const serviceState = new WeakMap<VoiceToolServices, VoiceModeState>();
+const serviceCtx = new WeakMap<VoiceToolServices, ExtensionContext>();
 
 export function attachStateToServices(services: VoiceToolServices, state: VoiceModeState) {
 	serviceState.set(services, state);
+	services.notifySpeaking = (speaking) => {
+		if (!state.enabled) return;
+		if (speaking) {
+			state.status = "speaking";
+		} else if (state.status === "speaking") {
+			state.status = "idle";
+		}
+		const ctx = serviceCtx.get(services);
+		if (ctx) applyVoiceChrome(ctx, state);
+	};
+}
+
+export function updateServiceContext(services: VoiceToolServices, ctx: ExtensionContext) {
+	serviceCtx.set(services, ctx);
 }
 
 function getStateFromServices(services: VoiceToolServices): VoiceModeState {

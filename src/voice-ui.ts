@@ -45,13 +45,19 @@ export function applyVoiceChrome(ctx: ExtensionContext, state: VoiceModeState) {
 			? "listening…"
 			: state.status === "agent"
 				? "agent working"
-				: "voice on"
+				: state.status === "speaking"
+					? "speaking…"
+					: "voice on"
 		: "voice ready";
 	ctx.ui.setStatus("pi-listens", status);
 	if (!state.enabled) return;
 	ctx.ui.setWorkingIndicator({
-		frames: state.status === "listening" ? [ctx.ui.theme.fg("accent", "●"), ctx.ui.theme.fg("muted", "•")] : [ctx.ui.theme.fg("accent", "◌")],
-		intervalMs: 250,
+		frames: state.status === "listening"
+			? [ctx.ui.theme.fg("accent", "●"), ctx.ui.theme.fg("muted", "•")]
+			: state.status === "speaking"
+				? [ctx.ui.theme.fg("accent", "♪"), ctx.ui.theme.fg("muted", "♫")]
+				: [ctx.ui.theme.fg("accent", "◌")],
+		intervalMs: state.status === "speaking" ? 200 : 250,
 	});
 }
 
