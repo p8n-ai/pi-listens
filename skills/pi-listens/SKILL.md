@@ -15,6 +15,13 @@ This Pi package provides voice tools backed by Sarvam AI.
 - `voice_transcribe_file`: transcribe an existing audio file.
 - `voice_setup_check`: diagnose API key, recorder, player, and voice settings.
 
+## Commands
+
+- `/init`: create a global settings file with defaults. User only needs to set their Sarvam API key.
+- `/speak <text>`: speak text with Sarvam TTS.
+- `/voice-on`: start hands-free voice loop (auto-speaks replies and auto-listens by default).
+- `/voice-check`: show setup diagnostics and voice-mode status.
+
 ## Usage rules
 
 1. When you need user input, clarification, or confirmation, use `voice_ask` instead of asking only in text.

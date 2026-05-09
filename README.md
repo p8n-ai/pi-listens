@@ -7,12 +7,25 @@ Speech-first Pi package powered by [Sarvam AI](https://www.sarvam.ai/). It gives
 - voice-first clarification loops where the agent speaks a question, listens, transcribes, and continues
 - interactive TUI and headless/RPC usage through Pi extension tools and UI fallback
 
-## Install
+## Quick start
 
 ```bash
 pi install npm:@p8n.ai/pi-listens
-export SARVAM_API_KEY="your-sarvam-api-key"
 pi
+```
+
+Inside Pi, run `/init` to create a global settings file with sensible defaults:
+
+```
+/init
+```
+
+Then open `~/.pi/pi-listens.json` and replace the `apiKey` placeholder with your [Sarvam AI API key](https://dashboard.sarvam.ai).
+
+Alternatively, set the key via environment variable:
+
+```bash
+export SARVAM_API_KEY="your-sarvam-api-key"
 ```
 
 For local development from this checkout:
@@ -88,16 +101,15 @@ The extension also injects voice guidance into the system prompt:
 
 | Command | Purpose |
 | --- | --- |
-| `/listen [seconds]` | Stream one utterance over Sarvam WebSocket STT, wait for a sustained silence boundary, transcribe, and send it to Pi as a user message. |
+| `/init` | Create a global settings file at `~/.pi/pi-listens.json` with sensible defaults. Use `--overwrite` to replace an existing file. |
 | `/speak <text>` | Speak text with Sarvam TTS. |
-| `/voice-on [--speak] [--manual] [--no-listen] [seconds]` | Open the hands-free TUI panel. By default it listens now and auto-listens again after each agent response. `--speak` reads short assistant replies aloud. `--manual` leaves the panel active but only listens when you press R. |
-| `/voice-on --no-speak` | Open the panel without auto-reading assistant replies. |
-| `/voice-status` | Show setup and voice-mode status. |
+| `/voice-on [--no-speak] [--manual] [--no-listen] [seconds]` | Start the hands-free voice loop. Auto-speaks assistant replies and auto-listens by default. `--no-speak` disables reading replies aloud. `--manual` disables auto-listen (press Space to listen). |
+| `/voice-check` | Show setup diagnostics and voice-mode status. |
 
 Voice panel controls in interactive mode:
-- Space: listen now; press again while listening to stop listening; if Pi is speaking, Space stops playback before listening
-- A: auto-listen on/off (listen again after each assistant reply)
-- S: read aloud on/off (speak assistant replies)
+- Space: listen now; press again while listening to stop; if Pi is speaking, stops playback first
+- A: toggle auto-listen (listen again after each assistant reply)
+- S: toggle read-aloud (speak assistant replies)
 - Q: close the panel and stop any active listening or speaking
 - Click the orb: visual ripple feedback (terminals with mouse reporting)
 
@@ -143,7 +155,7 @@ Example config file:
   "ttsSampleRate": 24000,
   "ttsOutputCodec": "wav",
   "textFallback": true,
-  "autoSpeakAssistant": false,
+  "autoSpeakAssistant": true,
   "maxAutoSpeakChars": 320
 }
 ```
