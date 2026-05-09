@@ -70,7 +70,7 @@ jobs:
             printf '[%s]: https://github.com/p8n-ai/pi-listens/releases/tag/v%s\n' "$VERSION" "$VERSION" >> CHANGELOG.md
           fi
 
-      - name: Create release PR
+      - name: Create and merge release PR
         id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,31 +80,26 @@ jobs:
 
           git checkout -b "$BRANCH"
           git add package.json package-lock.json CHANGELOG.md
-          if ! git diff --cached --quiet; then
+          if git diff --cached --quiet; then
+            echo "No changes to commit — version $VERSION is already in main."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            git checkout main
+          else
             git commit -m "release: v$VERSION"
+            git push origin "$BRANCH"
+
+            PR_URL=$(gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "release: v$VERSION" \
+              --body "Automated release PR for v$VERSION. Merging this will trigger npm publish and GitHub release creation.")
+            PR_NUMBER=$(echo "$PR_URL" | grep -o '[0-9]*$')
+
+            gh pr merge "$PR_NUMBER" --merge --delete-branch
+            git checkout main
+            git pull origin main
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
           fi
-          git push origin "$BRANCH"
-
-          PR_URL=$(gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "release: v$VERSION" \
-            --body "Automated release PR for v$VERSION. Merging this will trigger npm publish and GitHub release creation.")
-          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
-
-          PR_NUMBER=$(echo "$PR_URL" | grep -o '[0-9]*$')
-          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-
-      - name: Merge release PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr merge "${{ steps.pr.outputs.number }}" --merge --delete-branch
-
-      - name: Checkout merged main
-        run: |
-          git checkout main
-          git pull origin main
 
       - name: Tag release
         run: |
