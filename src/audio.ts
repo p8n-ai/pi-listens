@@ -17,12 +17,18 @@ export interface AudioRuntime {
 	hasActivePlayback(): boolean;
 	waitForPlaybackIdle(timeoutMs?: number): Promise<void>;
 	describe(): { recorder: string; player: string; streamingPlayer: string };
+	/** Enqueue a playback task. Waits for any prior queued playback to finish before starting. */
+	enqueuePlayback(fn: () => Promise<void>): Promise<void>;
+	/** Clear the playback queue and stop current playback (for interrupts). */
+	interruptPlayback(): void;
 }
 
 export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 	const recorder = config.recordCommand ? "custom" : detectRecorder();
 	const player = config.playCommand ? "custom" : detectPlayer();
 	const streamingPlayer = detectStreamingPlayer();
+	let playbackQueue: Promise<void> = Promise.resolve();
+	let queueGeneration = 0;
 
 	return {
 		async record(seconds = config.recordSeconds, signal?: AbortSignal): Promise<string> {
@@ -100,7 +106,14 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 		},
 
 		async waitForPlaybackIdle(timeoutMs = 30_000): Promise<void> {
+			// Wait for the queue to drain and all active playback processes to finish
 			const start = Date.now();
+			const queueSnapshot = playbackQueue;
+			await Promise.race([
+				queueSnapshot.catch(() => {}),
+				new Promise<void>((r) => setTimeout(r, timeoutMs)),
+			]);
+			// Also wait for any straggling processes
 			while (hasActiveProcesses("play") && Date.now() - start < timeoutMs) {
 				await new Promise((r) => setTimeout(r, 150));
 			}
@@ -108,6 +121,24 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 
 		describe() {
 			return { recorder: recorder ?? "missing", player: player ?? "missing", streamingPlayer: streamingPlayer ?? "missing" };
+		},
+
+		enqueuePlayback(fn: () => Promise<void>): Promise<void> {
+			const gen = queueGeneration;
+			const task = playbackQueue
+				.catch(() => {}) // don't let prior failures block the queue
+				.then(() => {
+					if (queueGeneration !== gen) return; // queue was interrupted since enqueue
+					return fn();
+				});
+			playbackQueue = task;
+			return task;
+		},
+
+		interruptPlayback(): void {
+			queueGeneration++; // invalidate all pending tasks
+			playbackQueue = Promise.resolve();
+			stopActiveAudioProcesses({ kind: "play" });
 		},
 	};
 }

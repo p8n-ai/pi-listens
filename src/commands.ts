@@ -223,8 +223,8 @@ async function listenAndSend(
 }
 
 async function speakText(services: VoiceToolServices, text: string, signal?: AbortSignal) {
-	// Stop any in-flight playback before starting new speech
-	services.getAudio().stopPlayback();
+	// Interrupt any queued/in-flight playback before starting command-initiated speech
+	services.getAudio().interruptPlayback();
 	await playSpeechBest(services, text, signal);
 }
 
@@ -302,7 +302,7 @@ function stopSpeaking(services: VoiceToolServices, state: VoiceModeState) {
 	const speakAbortController = state.speakAbortController;
 	state.speakAbortController = undefined;
 	speakAbortController?.abort();
-	services.getAudio().stopPlayback();
+	services.getAudio().interruptPlayback();
 }
 
 export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState, ctx?: ExtensionContext | ExtensionCommandContext) {
@@ -317,6 +317,7 @@ export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState
 	listenAbortController?.abort();
 
 	stopSpeaking(services, state);
+	services.getAudio().interruptPlayback();
 	services.getAudio().stopAll();
 
 	if (ctx) uninstallVoiceUi(ctx, state);

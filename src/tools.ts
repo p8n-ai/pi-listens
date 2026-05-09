@@ -55,11 +55,13 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		],
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {
-			// Stop any in-flight playback before starting new speech
-			services.getAudio().stopPlayback();
+			const audio = services.getAudio();
 			services.notifySpeaking?.(true);
 			onUpdate?.({ content: [{ type: "text", text: "Starting streamed speech with Sarvam AI…" }], details: {} });
-			const playback = playSpeechBest(params.text, services, signal);
+			let playbackDetails: Record<string, unknown> = {};
+			const playback = audio.enqueuePlayback(async () => {
+				playbackDetails = await playSpeechBest(params.text, services, signal);
+			});
 			if (params.wait_for_playback !== true) {
 				void playback.then(() => services.notifySpeaking?.(false), () => services.notifySpeaking?.(false));
 				return {
@@ -69,10 +71,10 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 			}
 			onUpdate?.({ content: [{ type: "text", text: "Playing audio…" }], details: {} });
 			try {
-				const details = await playback;
+				await playback;
 				return {
 					content: [{ type: "text", text: `Spoke to user: ${params.text}` }],
-					details: { ...details, played: true, text: params.text },
+					details: { ...playbackDetails, played: true, text: params.text },
 				};
 			} finally {
 				services.notifySpeaking?.(false);
@@ -124,7 +126,9 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		parameters: VoiceAskParams,
 		async execute(_toolCallId, params: VoiceAskInput, signal, onUpdate, ctx) {
 			onUpdate?.({ content: [{ type: "text", text: "Speaking question…" }], details: {} });
-			services.getAudio().stopPlayback();
+			const audio = services.getAudio();
+			// Wait for any queued speech to finish before asking the question
+			await audio.waitForPlaybackIdle();
 			services.notifySpeaking?.(true);
 			try {
 				await playSpeechBest(params.question, services, signal);
