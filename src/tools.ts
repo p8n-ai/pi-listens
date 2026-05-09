@@ -13,6 +13,7 @@ export interface VoiceToolServices {
 	getConfig: () => PiListensConfig;
 	getAudio: () => AudioRuntime;
 	getSpeech: () => SarvamSpeechClient;
+	notifySpeaking?: (speaking: boolean) => void;
 }
 
 const VoiceOutputParams = Type.Object({
@@ -54,21 +55,28 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		],
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {
+			// Stop any in-flight playback before starting new speech
+			services.getAudio().stopPlayback();
+			services.notifySpeaking?.(true);
 			onUpdate?.({ content: [{ type: "text", text: "Starting streamed speech with Sarvam AI…" }], details: {} });
 			const playback = playSpeechBest(params.text, services, signal);
 			if (params.wait_for_playback !== true) {
-				void playback.catch(() => undefined);
+				void playback.then(() => services.notifySpeaking?.(false), () => services.notifySpeaking?.(false));
 				return {
 					content: [{ type: "text", text: `Started speaking to user: ${params.text}` }],
 					details: { played: "started", text: params.text },
 				};
 			}
 			onUpdate?.({ content: [{ type: "text", text: "Playing audio…" }], details: {} });
-			const details = await playback;
-			return {
-				content: [{ type: "text", text: `Spoke to user: ${params.text}` }],
-				details: { ...details, played: true, text: params.text },
-			};
+			try {
+				const details = await playback;
+				return {
+					content: [{ type: "text", text: `Spoke to user: ${params.text}` }],
+					details: { ...details, played: true, text: params.text },
+				};
+			} finally {
+				services.notifySpeaking?.(false);
+			}
 		},
 		renderCall(args: VoiceOutputInput, theme) {
 			return new Text(`${theme.fg("toolTitle", theme.bold("voice_output "))}${theme.fg("muted", quote(args.text))}`, 0, 0);
@@ -116,7 +124,13 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		parameters: VoiceAskParams,
 		async execute(_toolCallId, params: VoiceAskInput, signal, onUpdate, ctx) {
 			onUpdate?.({ content: [{ type: "text", text: "Speaking question…" }], details: {} });
-			await playSpeechBest(params.question, services, signal);
+			services.getAudio().stopPlayback();
+			services.notifySpeaking?.(true);
+			try {
+				await playSpeechBest(params.question, services, signal);
+			} finally {
+				services.notifySpeaking?.(false);
+			}
 			const answer = await listenAndMaybeFallback(
 				params,
 				services,

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { VoiceToolServices } from "./tools.js";
-import { conciseTranscript, prepareSpokenText } from "./text.js";
+import { conciseTranscript } from "./text.js";
 import { audioExtensionForCodec, maskSecret } from "./config.js";
 import { applyVoiceChrome, installVoiceUi, uninstallVoiceUi } from "./voice-ui.js";
 
@@ -13,12 +13,10 @@ export type VoiceLoopStatus = "idle" | "listening" | "transcribing" | "agent" | 
 export interface VoiceModeState {
 	enabled: boolean;
 	autoListen: boolean;
-	autoSpeakAssistant: boolean;
 	isListening: boolean;
 	status: VoiceLoopStatus;
 	uiInstalled?: boolean;
 	previousEditorFactory?: unknown;
-	lastAssistantText?: string;
 	lastTranscript?: string;
 	lastError?: string;
 	recordSeconds?: number;
@@ -48,10 +46,9 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 	});
 
 	pi.registerCommand("voice-on", {
-		description: "Enable hands-free voice loop with auto-speak and auto-listen. Use --no-speak to disable reading replies aloud, --manual to only listen on demand.",
+		description: "Enable hands-free voice loop with auto-listen. Use --manual to only listen on demand.",
 		handler: async (args, ctx) => {
 			state.enabled = true;
-			state.autoSpeakAssistant = !args.includes("--no-speak");
 			state.autoListen = !args.includes("--manual");
 			installVoiceUi(ctx, state, createVoiceUiCallbacks(pi, services, state, ctx));
 			applyVoiceChrome(ctx, state);
@@ -79,7 +76,6 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 					`TTS: ${config.ttsModel} (${config.ttsLanguageCode}, speaker ${config.ttsSpeaker})`,
 					"",
 					`Voice mode: ${state.enabled ? "on" : "off"}`,
-					`Auto-speak: ${state.autoSpeakAssistant ? "on" : "off"}`,
 					`Auto-listen: ${state.autoListen ? "on" : "off"}`,
 				].join("\n"),
 				ready ? "info" : "warning",
@@ -107,8 +103,6 @@ const INIT_SETTINGS_TEMPLATE = {
 	ttsSampleRate: 24000,
 	ttsOutputCodec: "wav",
 	textFallback: true,
-	autoSpeakAssistant: true,
-	maxAutoSpeakChars: 320,
 };
 
 async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandContext, overwrite: boolean) {
@@ -154,26 +148,9 @@ async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandCo
 }
 export async function maybeContinueVoiceLoop(pi: ExtensionAPI, services: VoiceToolServices, state: VoiceModeState, ctx: ExtensionContext) {
 	if (!state.enabled || state.isListening) return;
-	if (state.autoSpeakAssistant && state.lastAssistantText) {
-		const spoken = prepareSpokenText(state.lastAssistantText, services.getConfig().maxAutoSpeakChars);
-		if (spoken) {
-			try {
-				await speakText(services, spoken, ctx.signal, state, ctx);
-			} catch (err) {
-				if (isCancelled(err)) {
-					state.status = "idle";
-					state.lastError = undefined;
-					applyVoiceChrome(ctx, state);
-					return;
-				}
-				state.status = "error";
-				state.lastError = errorMessage(err);
-				applyVoiceChrome(ctx, state);
-				ctx.ui.notify(`pi-listens could not speak assistant response: ${errorMessage(err)}`, "warning");
-			}
-		}
-	}
-	if (!state.enabled || !state.autoListen) { state.status = "idle"; applyVoiceChrome(ctx, state); return; }
+	if (!state.autoListen) { state.status = "idle"; applyVoiceChrome(ctx, state); return; }
+	// Wait for any in-flight tool-initiated playback to finish before opening the mic
+	await waitForPlaybackIdle(services);
 	ctx.ui.notify("Listening for your next instruction…", "info");
 	await listenAndSend(pi, services, ctx, undefined, { followUpWhenBusy: true });
 }
@@ -245,27 +222,14 @@ async function listenAndSend(
 	}
 }
 
-async function speakText(services: VoiceToolServices, text: string, signal?: AbortSignal, state?: VoiceModeState, ctx?: ExtensionContext) {
-	const speakAbortController = state ? new AbortController() : undefined;
-	const speakSignal = combineSignals(signal, speakAbortController?.signal);
+async function speakText(services: VoiceToolServices, text: string, signal?: AbortSignal) {
+	// Stop any in-flight playback before starting new speech
+	services.getAudio().stopPlayback();
+	await playSpeechBest(services, text, signal);
+}
 
-	if (state) {
-		state.speakAbortController?.abort();
-		state.speakAbortController = speakAbortController;
-		state.status = "speaking";
-		if (ctx) applyVoiceChrome(ctx, state);
-	}
-
-	try {
-		await playSpeechBest(services, text, speakSignal.signal);
-	} finally {
-		speakSignal.cleanup();
-		if (state && state.speakAbortController === speakAbortController) state.speakAbortController = undefined;
-		if (state && state.status === "speaking") {
-			state.status = "idle";
-			if (ctx) applyVoiceChrome(ctx, state);
-		}
-	}
+async function waitForPlaybackIdle(services: VoiceToolServices): Promise<void> {
+	await services.getAudio().waitForPlaybackIdle();
 }
 
 async function playSpeechBest(services: VoiceToolServices, text: string, signal?: AbortSignal) {
@@ -304,7 +268,6 @@ function createVoiceUiCallbacks(pi: ExtensionAPI, services: VoiceToolServices, s
 		disable: () => {
 			stopVoiceMode(services, state, ctx);
 		},
-		toggleSpeak: () => { state.autoSpeakAssistant = !state.autoSpeakAssistant; applyVoiceChrome(ctx, state); },
 		toggleAutoListen: () => { state.autoListen = !state.autoListen; applyVoiceChrome(ctx, state); },
 	};
 }
@@ -360,9 +323,24 @@ export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState
 }
 
 const serviceState = new WeakMap<VoiceToolServices, VoiceModeState>();
+const serviceCtx = new WeakMap<VoiceToolServices, ExtensionContext>();
 
 export function attachStateToServices(services: VoiceToolServices, state: VoiceModeState) {
 	serviceState.set(services, state);
+	services.notifySpeaking = (speaking) => {
+		if (!state.enabled) return;
+		if (speaking) {
+			state.status = "speaking";
+		} else if (state.status === "speaking") {
+			state.status = "idle";
+		}
+		const ctx = serviceCtx.get(services);
+		if (ctx) applyVoiceChrome(ctx, state);
+	};
+}
+
+export function updateServiceContext(services: VoiceToolServices, ctx: ExtensionContext) {
+	serviceCtx.set(services, ctx);
 }
 
 function getStateFromServices(services: VoiceToolServices): VoiceModeState {

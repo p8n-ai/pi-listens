@@ -7,7 +7,6 @@ type EditorFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
 export interface VoiceUiCallbacks {
 	startListening: () => void;
 	disable: () => void;
-	toggleSpeak: () => void;
 	toggleAutoListen: () => void;
 }
 
@@ -46,15 +45,19 @@ export function applyVoiceChrome(ctx: ExtensionContext, state: VoiceModeState) {
 			? "listening…"
 			: state.status === "agent"
 				? "agent working"
-				: state.autoSpeakAssistant
-					? "voice on + speak"
+				: state.status === "speaking"
+					? "speaking…"
 					: "voice on"
 		: "voice ready";
 	ctx.ui.setStatus("pi-listens", status);
 	if (!state.enabled) return;
 	ctx.ui.setWorkingIndicator({
-		frames: state.status === "listening" ? [ctx.ui.theme.fg("accent", "●"), ctx.ui.theme.fg("muted", "•")] : [ctx.ui.theme.fg("accent", "◌")],
-		intervalMs: 250,
+		frames: state.status === "listening"
+			? [ctx.ui.theme.fg("accent", "●"), ctx.ui.theme.fg("muted", "•")]
+			: state.status === "speaking"
+				? [ctx.ui.theme.fg("accent", "♪"), ctx.ui.theme.fg("muted", "♫")]
+				: [ctx.ui.theme.fg("accent", "◌")],
+		intervalMs: state.status === "speaking" ? 200 : 250,
 	});
 }
 
@@ -91,11 +94,6 @@ class VoiceLoopEditor extends CustomEditor {
 		if (data === " ") {
 			this.triggerOrbClick(1);
 			this.callbacks.startListening();
-			return;
-		}
-		if (data.toLowerCase() === "s") {
-			this.triggerOrbClick(0.5, -0.18, 0.12);
-			this.callbacks.toggleSpeak();
 			return;
 		}
 		if (data.toLowerCase() === "a") {
@@ -311,7 +309,6 @@ function controlRail(state: VoiceModeState, palette: OrbPalette, width: number):
 	const pills = [
 		controlPill("Space", listenLabel, state.isListening ? "active" : "primary", palette),
 		controlPill("A", state.autoListen ? "auto-listen on" : "auto-listen off", state.autoListen ? "active" : "muted", palette),
-		controlPill("S", state.autoSpeakAssistant ? "read aloud on" : "read aloud off", state.autoSpeakAssistant ? "active" : "muted", palette),
 		controlPill("Q", "close", "danger", palette),
 	];
 	return wrapInline(pills, "  ", Math.max(24, width - 2));

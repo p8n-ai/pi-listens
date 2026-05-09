@@ -32,8 +32,6 @@ export interface PiListensConfig {
 	audioDir: string;
 	deleteAudio: boolean;
 	textFallback: boolean;
-	autoSpeakAssistant: boolean;
-	maxAutoSpeakChars: number;
 }
 
 const DEFAULT_CONFIG: PiListensConfig = {
@@ -59,8 +57,6 @@ const DEFAULT_CONFIG: PiListensConfig = {
 	audioDir: join(tmpdir(), "pi-listens"),
 	deleteAudio: true,
 	textFallback: true,
-	autoSpeakAssistant: false,
-	maxAutoSpeakChars: 320,
 };
 
 type RawConfig = Partial<PiListensConfig>;
@@ -102,8 +98,6 @@ export function resolveConfig(cwd: string): PiListensConfig {
 		audioDir: env("PI_LISTENS_AUDIO_DIR"),
 		deleteAudio: parseBoolean(env("PI_LISTENS_DELETE_AUDIO")),
 		textFallback: parseBoolean(env("PI_LISTENS_TEXT_FALLBACK")),
-		autoSpeakAssistant: parseBoolean(env("PI_LISTENS_AUTO_SPEAK")),
-		maxAutoSpeakChars: parseInteger(env("PI_LISTENS_MAX_AUTO_SPEAK_CHARS")),
 	};
 
 	return mergeDefined(DEFAULT_CONFIG, fileConfig, envConfig);

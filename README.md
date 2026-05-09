@@ -103,15 +103,24 @@ The extension also injects voice guidance into the system prompt:
 | --- | --- |
 | `/init` | Create a global settings file at `~/.pi/pi-listens.json` with sensible defaults. Use `--overwrite` to replace an existing file. |
 | `/speak <text>` | Speak text with Sarvam TTS. |
-| `/voice-on [--no-speak] [--manual] [--no-listen] [seconds]` | Start the hands-free voice loop. Auto-speaks assistant replies and auto-listens by default. `--no-speak` disables reading replies aloud. `--manual` disables auto-listen (press Space to listen). |
+| `/voice-on [--manual] [--no-listen] [seconds]` | Start the hands-free voice loop. Auto-listens for the next instruction after each agent turn. `--manual` disables auto-listen (press Space to listen). |
 | `/voice-check` | Show setup diagnostics and voice-mode status. |
 
 Voice panel controls in interactive mode:
 - Space: listen now; press again while listening to stop; if Pi is speaking, stops playback first
 - A: toggle auto-listen (listen again after each assistant reply)
-- S: toggle read-aloud (speak assistant replies)
 - Q: close the panel and stop any active listening or speaking
 - Click the orb: visual ripple feedback (terminals with mouse reporting)
+
+The orb animates to reflect the current state:
+
+| State | Orb Color | Animation | Status Bar |
+| --- | --- | --- | --- |
+| Idle | Teal | Gentle pulse | `voice on` |
+| Listening | Blue | Ripple | `listening…` |
+| Speaking | Pink/Magenta | Wave | `speaking…` |
+| Agent working | Purple | Swirl | `agent working` |
+| Error | Red | — | Shows error message |
 
 ## Headless/RPC behavior
 
@@ -154,9 +163,7 @@ Example config file:
   "silenceThreshold": "1%",
   "ttsSampleRate": 24000,
   "ttsOutputCodec": "wav",
-  "textFallback": true,
-  "autoSpeakAssistant": true,
-  "maxAutoSpeakChars": 320
+  "textFallback": true
 }
 ```
 
@@ -188,8 +195,6 @@ Supported environment variables:
 - `PI_LISTENS_AUDIO_DIR`
 - `PI_LISTENS_DELETE_AUDIO`
 - `PI_LISTENS_TEXT_FALLBACK`
-- `PI_LISTENS_AUTO_SPEAK`
-- `PI_LISTENS_MAX_AUTO_SPEAK_CHARS`
 
 ## Notes
 

@@ -19,18 +19,19 @@ This Pi package provides voice tools backed by Sarvam AI.
 
 - `/init`: create a global settings file with defaults. User only needs to set their Sarvam API key.
 - `/speak <text>`: speak text with Sarvam TTS.
-- `/voice-on`: start hands-free voice loop (auto-speaks replies and auto-listens by default).
+- `/voice-on`: start hands-free voice loop (auto-listens after each agent turn by default).
 - `/voice-check`: show setup diagnostics and voice-mode status.
 
 ## Usage rules
 
 1. When you need user input, clarification, or confirmation, use `voice_ask` instead of asking only in text.
 2. Before using `voice_input`, make sure the user already knows you are listening. If not, use `voice_ask`.
-3. Use `voice_output` only for concise spoken status updates or spoken summaries that matter to the user.
+3. The agent controls when to speak — use `voice_output` for concise spoken status updates that matter to the user. There is no automatic read-aloud; the agent decides.
 4. Spoken output must be brief: 1-2 short sentences, no markdown headings, no hashtags, no bullet lists, no boilerplate recap, and no full task summaries. Leave details in text.
 5. Do not speak code blocks, diffs, stack traces, logs, long tables, or lengthy explanations. Summarize briefly and leave details in text.
 6. Treat transcripts returned by `voice_input` or `voice_ask` as user input, while allowing for speech-recognition mistakes. If the transcript is ambiguous, ask a short follow-up with `voice_ask`.
 7. If speech is not recognized, rely on the tool's text fallback when available, or ask again with a shorter prompt.
+8. The voice orb reflects the current state: blue (listening), pink (speaking), purple (agent working). Calling `voice_output` automatically transitions the orb to the speaking state.
 
 ## Good voice question style
 
