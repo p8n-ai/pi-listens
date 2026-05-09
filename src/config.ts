@@ -32,6 +32,7 @@ export interface PiListensConfig {
 	audioDir: string;
 	deleteAudio: boolean;
 	textFallback: boolean;
+	conversational: boolean;
 }
 
 const DEFAULT_CONFIG: PiListensConfig = {
@@ -57,6 +58,7 @@ const DEFAULT_CONFIG: PiListensConfig = {
 	audioDir: join(tmpdir(), "pi-listens"),
 	deleteAudio: true,
 	textFallback: true,
+	conversational: false,
 };
 
 type RawConfig = Partial<PiListensConfig>;
@@ -98,6 +100,7 @@ export function resolveConfig(cwd: string): PiListensConfig {
 		audioDir: env("PI_LISTENS_AUDIO_DIR"),
 		deleteAudio: parseBoolean(env("PI_LISTENS_DELETE_AUDIO")),
 		textFallback: parseBoolean(env("PI_LISTENS_TEXT_FALLBACK")),
+		conversational: parseBoolean(env("PI_LISTENS_CONVERSATIONAL")),
 	};
 
 	return mergeDefined(DEFAULT_CONFIG, fileConfig, envConfig);

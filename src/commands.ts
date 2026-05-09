@@ -79,9 +79,20 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 					"",
 					`Voice mode: ${state.enabled ? "on" : "off"}`,
 					`Auto-listen: ${state.autoListen ? "on" : "off"}`,
+					`Conversational: ${config.conversational ? "on" : "off"}`,
 				].join("\n"),
 				ready ? "info" : "warning",
 			);
+		},
+	});
+
+	pi.registerCommand("voice-chatty", {
+		description: "Toggle conversational mode. When on, the agent speaks its responses and thinks out loud instead of only writing text.",
+		handler: async (_args, ctx) => {
+			const config = services.getConfig();
+			(config as unknown as Record<string, unknown>).conversational = !config.conversational;
+			const mode = config.conversational ? "on" : "off";
+			ctx.ui.notify(`Conversational mode: ${mode}. ${config.conversational ? "The agent will speak its responses." : "The agent will write text and speak only for status updates."}`, "info");
 		},
 	});
 }
@@ -105,6 +116,7 @@ const INIT_SETTINGS_TEMPLATE = {
 	ttsSampleRate: 24000,
 	ttsOutputCodec: "wav",
 	textFallback: true,
+	conversational: false,
 };
 
 async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandContext, overwrite: boolean) {

@@ -65,8 +65,11 @@ export default function piListensExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("before_agent_start", async (event) => {
+		const voiceGuidance = config.conversational
+			? buildConversationalPrompt()
+			: buildDefaultVoicePrompt();
 		return {
-			systemPrompt: `${event.systemPrompt}\n\nPi Listens voice guidance:\n- The user may primarily interact by speech through Sarvam AI. Text input is still possible.\n- When voice mode is active, treat it as a hands-free conversation: listen only while the voice UI/input tool is active, then pause listening while you work.\n- Use voice_output only for concise spoken progress, completion, or status updates that matter to the user.\n- Spoken replies must be brief: 1-2 short sentences, no headings, no hashtags, no bullet lists, no boilerplate recap, and no full task summaries. Leave details in text.\n- When you need clarification, confirmation, or any user input, prefer voice_ask with a concise spoken question instead of asking only in text.\n- Use voice_input only after the user already knows you are listening.\n- Do not speak code blocks, logs, diffs, stack traces, or long explanations; summarize briefly and leave detail in text.`,
+			systemPrompt: `${event.systemPrompt}\n\n${voiceGuidance}`,
 		};
 	});
 
@@ -88,4 +91,34 @@ export default function piListensExtension(pi: ExtensionAPI) {
 	pi.on("session_tree", async (_event, ctx) => {
 		reloadConfig(ctx.cwd || lastCwd);
 	});
+}
+
+function buildDefaultVoicePrompt(): string {
+	return [
+		"Pi Listens voice guidance:",
+		"- The user may primarily interact by speech through Sarvam AI. Text input is still possible.",
+		"- When voice mode is active, treat it as a hands-free conversation: listen only while the voice UI/input tool is active, then pause listening while you work.",
+		"- Use voice_output only for concise spoken progress, completion, or status updates that matter to the user.",
+		"- Spoken replies must be brief: 1-2 short sentences, no headings, no hashtags, no bullet lists, no boilerplate recap, and no full task summaries. Leave details in text.",
+		"- When you need clarification, confirmation, or any user input, prefer voice_ask with a concise spoken question instead of asking only in text.",
+		"- Use voice_input only after the user already knows you are listening.",
+		"- Do not speak code blocks, logs, diffs, stack traces, or long explanations; summarize briefly and leave detail in text.",
+	].join("\n");
+}
+
+function buildConversationalPrompt(): string {
+	return [
+		"Pi Listens voice guidance (conversational mode):",
+		"- The user is interacting by voice through Sarvam AI. This is a spoken conversation — respond as a natural, helpful human colleague would.",
+		"- SPEAK your responses using voice_output. Do not just write text and stay silent — the user expects to hear you.",
+		"- Break longer responses into multiple short voice_output calls (1-3 sentences each) rather than one long block. This feels more natural.",
+		"- When you have options, ideas, or suggestions, talk through them conversationally. Do not present numbered lists — discuss them like a colleague would.",
+		"- When you need any input, clarification, or decision from the user, always use voice_ask. Do not use text prompts, forms, or the interview tool unless the user explicitly asks for one.",
+		"- Use voice_input only after the user already knows you are listening.",
+		"- Think out loud briefly — share what you are about to do (e.g., 'Let me look at that file' or 'I will run the tests now') before doing it.",
+		"- After completing work, summarize the outcome by speaking — do not just leave a text summary.",
+		"- Keep each spoken segment concise and conversational. No headings, hashtags, bullet lists, or boilerplate in speech.",
+		"- Code, diffs, logs, and stack traces still go in text — but always speak a brief natural summary of what they show.",
+		"- Match the user's energy and language. If they are casual, be casual. If they are brief, be brief.",
+	].join("\n");
 }
