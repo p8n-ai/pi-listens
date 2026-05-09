@@ -5,12 +5,22 @@ All notable changes to `@p8n.ai/pi-listens` will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
-
 ### Added
 
 - Conversational mode (`conversational` config option, default `false`). When enabled, the agent speaks its responses, thinks out loud, and uses `voice_ask` for all decisions instead of text or forms.
 - `/voice-chatty` command to toggle conversational mode at runtime without editing config.
 - `PI_LISTENS_CONVERSATIONAL` environment variable.
+
+### Fixed
+
+- Consecutive `voice_output` calls now play in sequence instead of each one cutting off the previous. Uses an internal playback queue.
+- Voice orb no longer flickers to teal (idle) between queued voice outputs — stays pink (speaking) throughout.
+- Voice orb shows purple (agent working) instead of teal (idle) when speech finishes but the agent is still processing.
+- `voice_ask` waits for any queued speech to finish before speaking its question, instead of interrupting.
+
+### Removed
+
+- Unused `transcribing` orb state (was defined but never activated).
 
 ## [0.2.2] - 2026-05-09
 
