@@ -50,7 +50,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 					`Sarvam API key: ${maskSecret(config.apiKey)}`,
 					`Recorder: ${audioInfo.recorder}`,
 					`Player: ${audioInfo.player}`,
-					"Run /init to create a settings file, or /voice-check for details.",
+					"Run /voice-init to create a settings file, or /voice-check for details.",
 				].join("\n"),
 				"warning",
 			);

@@ -6,7 +6,7 @@ Single TypeScript extension, no build step. Pi loads `src/index.ts` directly.
 |------|---------|
 | `src/index.ts` | Extension entry, event hooks |
 | `src/tools.ts` | Agent tools (voice_output, voice_input, voice_ask) |
-| `src/commands.ts` | Slash commands (/init, /speak, /voice-on, /voice-check) |
+| `src/commands.ts` | Slash commands (/voice-init, /speak, /voice-on, /voice-check) |
 | `src/sarvam.ts` | Sarvam AI client (WebSocket STT, REST TTS) |
 | `src/audio.ts` | Local mic recording and playback |
 | `src/config.ts` | Config resolution (defaults → user → project → env) |

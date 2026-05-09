@@ -14,10 +14,10 @@ pi install npm:@p8n.ai/pi-listens
 pi
 ```
 
-Inside Pi, run `/init` to create a global settings file with sensible defaults:
+Inside Pi, run `/voice-init` to create a global settings file with sensible defaults:
 
 ```
-/init
+/voice-init
 ```
 
 Then open `~/.pi/pi-listens.json` and replace the `apiKey` placeholder with your [Sarvam AI API key](https://dashboard.sarvam.ai).
@@ -101,7 +101,7 @@ The extension also injects voice guidance into the system prompt:
 
 | Command | Purpose |
 | --- | --- |
-| `/init` | Create a global settings file at `~/.pi/pi-listens.json` with sensible defaults. Use `--overwrite` to replace an existing file. |
+| `/voice-init` | Create a global settings file at `~/.pi/pi-listens.json` with sensible defaults. Use `--overwrite` to replace an existing file. |
 | `/speak <text>` | Speak text with Sarvam TTS. |
 | `/voice-on [--manual] [--no-listen] [seconds]` | Start the hands-free voice loop. Auto-listens for the next instruction after each agent turn. `--manual` disables auto-listen (press Space to listen). |
 | `/voice-check` | Show setup diagnostics and voice-mode status. |
