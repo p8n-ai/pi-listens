@@ -121,6 +121,7 @@ async function listenAndSend(
 		state.listenAbortController?.abort();
 		return;
 	}
+	stopSpeaking(services, state);
 	state.recordSeconds = seconds ?? services.getConfig().recordSeconds;
 	state.silenceStopSeconds = services.getConfig().silenceStopSeconds;
 	state.isListening = true;
@@ -253,6 +254,13 @@ function isCancelled(err: unknown): boolean {
 	return err instanceof Error && /cancelled|aborted/i.test(err.message);
 }
 
+function stopSpeaking(services: VoiceToolServices, state: VoiceModeState) {
+	const speakAbortController = state.speakAbortController;
+	state.speakAbortController = undefined;
+	speakAbortController?.abort();
+	services.getAudio().stopPlayback();
+}
+
 export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState, ctx?: ExtensionContext | ExtensionCommandContext) {
 	state.enabled = false;
 	state.autoListen = false;
@@ -264,10 +272,7 @@ export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState
 	state.listenAbortController = undefined;
 	listenAbortController?.abort();
 
-	const speakAbortController = state.speakAbortController;
-	state.speakAbortController = undefined;
-	speakAbortController?.abort();
-
+	stopSpeaking(services, state);
 	services.getAudio().stopAll();
 
 	if (ctx) uninstallVoiceUi(ctx, state);

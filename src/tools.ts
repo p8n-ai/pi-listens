@@ -49,8 +49,8 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		description: "Speak a short message to the user using Sarvam AI text-to-speech and local audio playback.",
 		promptSnippet: "Speak short user-facing messages with Sarvam AI TTS",
 		promptGuidelines: [
-			"Use voice_output when a spoken user-facing message matters, especially before waiting for voice input.",
-			"Keep voice_output text brief and conversational; do not speak code blocks, command output, stack traces, or long explanations.",
+			"Use voice_output only when a spoken user-facing message matters, especially before waiting for voice input.",
+			"Keep voice_output to 1-2 short conversational sentences. Do not speak headings, hashtags, bullet lists, boilerplate recaps, code, command output, stack traces, or long explanations.",
 		],
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {

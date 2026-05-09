@@ -33,7 +33,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck"
+    "test": "npm run typecheck && node --import tsx --test test/**/*.test.ts"
   },
   "pi": {
     "extensions": [

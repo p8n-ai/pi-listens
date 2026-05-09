@@ -80,9 +80,9 @@ The package registers these tools for Pi's agent:
 The extension also injects voice guidance into the system prompt:
 
 - use `voice_ask` whenever user input is needed in voice-first sessions
-- use `voice_output` for short spoken status or response snippets
+- use `voice_output` only for short spoken status or response snippets
+- keep spoken replies to 1-2 short sentences with no headings, hashtags, bullet lists, boilerplate recaps, or full task summaries
 - do not speak code blocks, logs, diffs, stack traces, or long explanations
-- keep spoken questions concise and answerable in a short response
 
 ## Commands
 
@@ -95,10 +95,10 @@ The extension also injects voice guidance into the system prompt:
 | `/voice-status` | Show setup and voice-mode status. |
 
 Voice panel controls in interactive mode:
-- R: listen now; press again while listening to stop listening
+- R: listen now; press again while listening to stop listening; if Pi is speaking, R stops playback before listening
 - A: auto-listen on/off (listen again after each assistant reply)
 - S: read aloud on/off (speak assistant replies)
-- Q: close the panel (and stop listening first if needed)
+- Q: close the panel and stop any active listening or speaking
 - Click the orb: visual ripple feedback (terminals with mouse reporting)
 
 ## Headless/RPC behavior
@@ -144,7 +144,7 @@ Example config file:
   "ttsOutputCodec": "wav",
   "textFallback": true,
   "autoSpeakAssistant": false,
-  "maxAutoSpeakChars": 900
+  "maxAutoSpeakChars": 320
 }
 ```
 

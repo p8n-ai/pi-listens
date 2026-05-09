@@ -11,6 +11,7 @@ export interface AudioRuntime {
 	streamPcm(signal?: AbortSignal): AsyncIterable<Buffer>;
 	play(path: string, signal?: AbortSignal): Promise<void>;
 	cleanup(path: string): Promise<void>;
+	stopPlayback(): void;
 	stopAll(): void;
 	describe(): { recorder: string; player: string };
 }
@@ -41,7 +42,7 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 				: useUtteranceMode
 					? utteranceRecorderCommand(recorder, path, config.recordSampleRate, config.silenceStartSeconds, config.silenceStopSeconds, config.silenceThreshold)
 					: recorderCommand(recorder, path, seconds, config.recordSampleRate);
-			await run(command.command, command.args, signal, useUtteranceMode ? { timeoutMs: seconds * 1000, resolveOnTimeout: true } : undefined);
+			await run(command.command, command.args, signal, { ...(useUtteranceMode ? { timeoutMs: seconds * 1000, resolveOnTimeout: true } : {}), kind: "record" });
 			return path;
 		},
 
@@ -54,7 +55,7 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 			const command = config.streamCommand
 				? customCommand(config.streamCommand, { sampleRate: config.recordSampleRate })
 				: pcmStreamCommand(recorder, config.recordSampleRate);
-			return streamCommandOutput(command.command, command.args, signal);
+			return streamCommandOutput(command.command, command.args, signal, "record");
 		},
 
 		async play(path: string, signal?: AbortSignal): Promise<void> {
@@ -64,12 +65,16 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 				);
 			}
 			const command = config.playCommand ? customCommand(config.playCommand, { path }) : playerCommand(player, path);
-			await run(command.command, command.args, signal);
+			await run(command.command, command.args, signal, { kind: "play" });
 		},
 
 		async cleanup(path: string): Promise<void> {
 			if (!config.deleteAudio) return;
 			await rm(path, { force: true }).catch(() => undefined);
+		},
+
+		stopPlayback(): void {
+			stopActiveAudioProcesses({ kind: "play" });
 		},
 
 		stopAll(): void {
@@ -213,14 +218,14 @@ function isCommandAvailable(command: string): boolean {
 	return false;
 }
 
-function run(command: string, args: string[], signal?: AbortSignal, options: { timeoutMs?: number; resolveOnTimeout?: boolean } = {}): Promise<void> {
+function run(command: string, args: string[], signal?: AbortSignal, options: { timeoutMs?: number; resolveOnTimeout?: boolean; kind?: AudioProcessKind } = {}): Promise<void> {
 	return new Promise((resolve, reject) => {
 		if (signal?.aborted) {
 			reject(new Error("Cancelled"));
 			return;
 		}
 
-		const child = spawnManaged(command, args);
+		const child = spawnManaged(command, args, options.kind ?? "other");
 		let stderr = "";
 		let stdout = "";
 		let timedOut = false;
@@ -265,9 +270,9 @@ function run(command: string, args: string[], signal?: AbortSignal, options: { t
 	});
 }
 
-async function* streamCommandOutput(command: string, args: string[], signal?: AbortSignal): AsyncIterable<Buffer> {
+async function* streamCommandOutput(command: string, args: string[], signal?: AbortSignal, kind: AudioProcessKind = "other"): AsyncIterable<Buffer> {
 	if (signal?.aborted) throw new Error("Cancelled");
-	const child = spawnManaged(command, args);
+	const child = spawnManaged(command, args, kind);
 	let stderr = "";
 	let exitCode: number | null = null;
 	let exitSignal: NodeJS.Signals | null = null;
@@ -298,23 +303,29 @@ async function* streamCommandOutput(command: string, args: string[], signal?: Ab
 	}
 }
 
+type AudioProcessKind = "record" | "play" | "other";
+
 type ManagedChild = ReturnType<typeof spawn>;
 
 const activeChildren = new Set<ManagedChild>();
+const childKinds = new WeakMap<ManagedChild, AudioProcessKind>();
 const terminatingChildren = new WeakSet<ManagedChild>();
 let processExitCleanupInstalled = false;
 
-export function stopActiveAudioProcesses(force = false): void {
-	for (const child of [...activeChildren]) terminateChild(child, force);
+export function stopActiveAudioProcesses(options: { kind?: AudioProcessKind; force?: boolean } = {}): void {
+	for (const child of [...activeChildren]) {
+		if (!options.kind || childKinds.get(child) === options.kind) terminateChild(child, options.force);
+	}
 }
 
-function spawnManaged(command: string, args: string[]): ManagedChild {
+function spawnManaged(command: string, args: string[], kind: AudioProcessKind): ManagedChild {
 	installProcessExitCleanup();
 	const child = spawn(command, args, {
 		stdio: ["ignore", "pipe", "pipe"],
 		detached: process.platform !== "win32",
 	});
 	activeChildren.add(child);
+	childKinds.set(child, kind);
 	const untrack = () => activeChildren.delete(child);
 	child.once("close", untrack);
 	child.once("error", untrack);
@@ -324,7 +335,7 @@ function spawnManaged(command: string, args: string[]): ManagedChild {
 function installProcessExitCleanup(): void {
 	if (processExitCleanupInstalled) return;
 	processExitCleanupInstalled = true;
-	process.once("exit", () => stopActiveAudioProcesses(true));
+	process.once("exit", () => stopActiveAudioProcesses({ force: true }));
 }
 
 function terminateChild(child: ManagedChild, force = false): void {

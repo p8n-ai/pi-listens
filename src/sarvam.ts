@@ -1,5 +1,4 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { setTimeout as delay } from "node:timers/promises";
 import { SarvamAIClient } from "sarvamai";
 import type { AudioRuntime } from "./audio.js";
 import type { PiListensConfig, SttMode } from "./config.js";
@@ -145,35 +144,46 @@ export class SarvamSpeechClient {
 		let languageProbability: number | undefined;
 		let streamError: Error | undefined;
 		let lastMessageAt = Date.now();
-
+		const messageWaiters = new Set<() => void>();
 		const socket = connectStreamingSocket(config, mode ?? (config.translateInputToEnglish ? "translate" : config.sttMode), inputAudioCodec);
 
 		const closeOnAbort = () => socket.close();
 		signal?.addEventListener("abort", closeOnAbort, { once: true });
+		const notifyMessageWaiters = () => {
+			const waiters = [...messageWaiters];
+			messageWaiters.clear();
+			for (const waiter of waiters) waiter();
+		};
 		socket.onMessage((message: StreamingResponse) => {
 			lastMessageAt = Date.now();
-			if (message.type === "error") {
-				streamError = new Error(message.data?.error ?? message.data?.code ?? "Sarvam streaming STT failed");
-				return;
+			try {
+				if (message.type === "error") {
+					streamError = new Error(message.data?.error ?? message.data?.code ?? "Sarvam streaming STT failed");
+					return;
+				}
+				if (message.type !== "data") return;
+				const data = message.data;
+				if (!data) return;
+				transcript = mergeTranscript(transcript, data.transcript ?? "");
+				requestId = data.request_id ?? requestId;
+				languageCode = data.language_code ?? languageCode;
+				languageProbability = data.language_probability ?? languageProbability;
+			} finally {
+				notifyMessageWaiters();
 			}
-			if (message.type !== "data") return;
-			const data = message.data;
-			if (!data) return;
-			transcript = mergeTranscript(transcript, data.transcript ?? "");
-			requestId = data.request_id ?? requestId;
-			languageCode = data.language_code ?? languageCode;
-			languageProbability = data.language_probability ?? languageProbability;
 		});
-		socket.onError((error: Error) => { streamError = error; });
+		socket.onError((error: Error) => { streamError = error; notifyMessageWaiters(); });
 
 		try {
 			await socket.waitForOpen();
 			await streamAudio(socket, async () => {
 				const startedWaitingAt = Date.now();
-				while (Date.now() - startedWaitingAt < 3000) {
+				const maxWaitMs = transcript.trim() ? 900 : 1600;
+				const settleMs = 250;
+				while (Date.now() - startedWaitingAt < maxWaitMs) {
 					if (streamError) throw streamError;
-					if (Date.now() - lastMessageAt > 850 && transcript.trim()) break;
-					await delay(100, undefined, { signal }).catch((err) => { throw err; });
+					if (transcript.trim() && Date.now() - lastMessageAt >= settleMs) break;
+					await waitForMessageOrTimeout(messageWaiters, 50, signal);
 				}
 			});
 			if (streamError) throw streamError;
@@ -286,6 +296,27 @@ function connectStreamingSocket(config: PiListensConfig, mode: SttMode, inputAud
 		onMessage(handler) { messageHandlers.add(handler); },
 		onError(handler) { errorHandlers.add(handler); },
 	};
+}
+
+function waitForMessageOrTimeout(waiters: Set<() => void>, timeoutMs: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new Error("Cancelled"));
+			return;
+		}
+
+		const done = () => { cleanup(); resolve(); };
+		const onAbort = () => { cleanup(); reject(new Error("Cancelled")); };
+		const timeout = setTimeout(done, timeoutMs);
+		const cleanup = () => {
+			clearTimeout(timeout);
+			waiters.delete(done);
+			signal?.removeEventListener("abort", onAbort);
+		};
+
+		waiters.add(done);
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
 }
 
 type CombinedSignal = { signal?: AbortSignal; cleanup: () => void };

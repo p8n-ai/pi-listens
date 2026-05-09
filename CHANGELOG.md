@@ -6,6 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Return Sarvam STT results faster after flushing microphone audio.
+- Stop current speech playback before starting a new listen, without cancelling the new recording.
+- Keep spoken auto-summaries concise and avoid headings, hashtags, bullet lists, and boilerplate recaps.
+
 ## [0.1.0] - 2026-05-09
 
 ### Added

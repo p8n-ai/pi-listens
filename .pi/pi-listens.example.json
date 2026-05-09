@@ -17,5 +17,6 @@
   "ttsSampleRate": 24000,
   "ttsOutputCodec": "wav",
   "textFallback": true,
-  "autoSpeakAssistant": false
+  "autoSpeakAssistant": false,
+  "maxAutoSpeakChars": 320
 }

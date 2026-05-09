@@ -60,7 +60,7 @@ const DEFAULT_CONFIG: PiListensConfig = {
 	deleteAudio: true,
 	textFallback: true,
 	autoSpeakAssistant: false,
-	maxAutoSpeakChars: 900,
+	maxAutoSpeakChars: 320,
 };
 
 type RawConfig = Partial<PiListensConfig>;
