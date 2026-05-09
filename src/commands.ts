@@ -26,7 +26,7 @@ export interface VoiceModeState {
 }
 
 export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServices, state: VoiceModeState) {
-	pi.registerCommand("init", {
+	pi.registerCommand("voice-init", {
 		description: "Create a global pi-listens settings file at ~/.pi/pi-listens.json with sensible defaults",
 		handler: async (args, ctx) => {
 			await initSettings(services, ctx, args.includes("--overwrite"));
@@ -119,7 +119,7 @@ async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandCo
 				`Settings file already exists: ${filePath}`,
 				hasKey ? "Sarvam API key: set" : "Sarvam API key: not yet configured",
 				"",
-				"Use /init --overwrite to replace it with fresh defaults.",
+				"Use /voice-init --overwrite to replace it with fresh defaults.",
 			].join("\n"),
 			"info",
 		);

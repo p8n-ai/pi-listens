@@ -25,7 +25,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `/init` command to create a global settings file (`~/.pi/pi-listens.json`) with sensible defaults.
+- `/voice-init` command to create a global settings file (`~/.pi/pi-listens.json`) with sensible defaults.
 - `/voice-check` command (replaces `/voice-status`) with improved diagnostic output.
 
 ### Changed
