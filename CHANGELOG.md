@@ -6,6 +6,15 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Remove automatic read-aloud of assistant replies (`autoSpeakAssistant`). The agent controls speech via the `voice_output` tool — no more unsolicited summaries.
+- `voice_output` now stops any in-flight playback before starting new speech, preventing overlapping audio.
+- Voice loop waits for any tool-initiated playback to finish before opening the mic for the next listen cycle.
+- Remove `autoSpeakAssistant`, `maxAutoSpeakChars` config options and `PI_LISTENS_AUTO_SPEAK`, `PI_LISTENS_MAX_AUTO_SPEAK_CHARS` env vars.
+- Remove the "S" (read-aloud toggle) key and pill from the voice panel.
+- Remove `--no-speak` flag from `/voice-on`.
+
 ## [0.2.0] - 2026-05-09
 
 ### Added
@@ -15,7 +24,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `/voice-on` now enables auto-speak by default for a full hands-free experience. Use `--no-speak` to opt out.
+- `/voice-on` now enables auto-speak by default for a full hands-free experience. Use `--no-speak` to opt out. _(removed in next release)_
 - Rename `/voice-status` to `/voice-check` to better communicate its diagnostic purpose.
 
 ### Removed

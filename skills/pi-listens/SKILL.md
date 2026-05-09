@@ -19,7 +19,7 @@ This Pi package provides voice tools backed by Sarvam AI.
 
 - `/init`: create a global settings file with defaults. User only needs to set their Sarvam API key.
 - `/speak <text>`: speak text with Sarvam TTS.
-- `/voice-on`: start hands-free voice loop (auto-speaks replies and auto-listens by default).
+- `/voice-on`: start hands-free voice loop (auto-listens after each agent turn by default).
 - `/voice-check`: show setup diagnostics and voice-mode status.
 
 ## Usage rules

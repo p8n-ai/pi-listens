@@ -4,7 +4,6 @@ import { maskSecret, resolveConfig, type PiListensConfig } from "./config.js";
 import { SarvamSpeechClient } from "./sarvam.js";
 import { attachStateToServices, maybeContinueVoiceLoop, registerVoiceCommands, stopVoiceMode, type VoiceModeState } from "./commands.js";
 import { registerVoiceTools, type VoiceToolServices } from "./tools.js";
-import { firstTextContent } from "./text.js";
 
 export default function piListensExtension(pi: ExtensionAPI) {
 	let config: PiListensConfig = resolveConfig(process.cwd());
@@ -13,10 +12,8 @@ export default function piListensExtension(pi: ExtensionAPI) {
 
 	const speech = new SarvamSpeechClient(() => config);
 	const state: VoiceModeState = {
-
 		enabled: false,
 		autoListen: false,
-		autoSpeakAssistant: config.autoSpeakAssistant,
 		isListening: false,
 		status: "idle",
 		recordSeconds: config.recordSeconds,
@@ -34,7 +31,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 		lastCwd = cwd;
 		config = resolveConfig(cwd);
 		audio = createAudioRuntime(config);
-		if (!state.enabled) { state.autoSpeakAssistant = config.autoSpeakAssistant; state.recordSeconds = config.recordSeconds; state.silenceStopSeconds = config.silenceStopSeconds; }
+		if (!state.enabled) { state.recordSeconds = config.recordSeconds; state.silenceStopSeconds = config.silenceStopSeconds; }
 	}
 
 	registerVoiceTools(pi, services);
@@ -69,10 +66,6 @@ export default function piListensExtension(pi: ExtensionAPI) {
 		};
 	});
 
-	pi.on("message_end", async (event) => {
-		if (event.message.role !== "assistant") return;
-		state.lastAssistantText = firstTextContent(event.message);
-	});
 
 	pi.on("agent_end", async (_event, ctx) => {
 		await maybeContinueVoiceLoop(pi, services, state, ctx);

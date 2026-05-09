@@ -14,6 +14,8 @@ export interface AudioRuntime {
 	cleanup(path: string): Promise<void>;
 	stopPlayback(): void;
 	stopAll(): void;
+	hasActivePlayback(): boolean;
+	waitForPlaybackIdle(timeoutMs?: number): Promise<void>;
 	describe(): { recorder: string; player: string; streamingPlayer: string };
 }
 
@@ -91,6 +93,17 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 
 		stopAll(): void {
 			stopActiveAudioProcesses();
+		},
+
+		hasActivePlayback(): boolean {
+			return hasActiveProcesses("play");
+		},
+
+		async waitForPlaybackIdle(timeoutMs = 30_000): Promise<void> {
+			const start = Date.now();
+			while (hasActiveProcesses("play") && Date.now() - start < timeoutMs) {
+				await new Promise((r) => setTimeout(r, 150));
+			}
 		},
 
 		describe() {
@@ -405,6 +418,13 @@ export function stopActiveAudioProcesses(options: { kind?: AudioProcessKind; for
 	for (const child of [...activeChildren]) {
 		if (!options.kind || childKinds.get(child) === options.kind) terminateChild(child, options.force);
 	}
+}
+
+function hasActiveProcesses(kind: AudioProcessKind): boolean {
+	for (const child of activeChildren) {
+		if (childKinds.get(child) === kind) return true;
+	}
+	return false;
 }
 
 function spawnManaged(command: string, args: string[], kind: AudioProcessKind, stdio: StdioOptions = ["ignore", "pipe", "pipe"]): ManagedChild {

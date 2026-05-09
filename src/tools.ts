@@ -54,6 +54,8 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		],
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {
+			// Stop any in-flight playback before starting new speech
+			services.getAudio().stopPlayback();
 			onUpdate?.({ content: [{ type: "text", text: "Starting streamed speech with Sarvam AI…" }], details: {} });
 			const playback = playSpeechBest(params.text, services, signal);
 			if (params.wait_for_playback !== true) {
