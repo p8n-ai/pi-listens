@@ -105,6 +105,7 @@ The extension also injects voice guidance into the system prompt:
 | `/speak <text>` | Speak text with Sarvam TTS. |
 | `/voice-on [--manual] [--no-listen] [seconds]` | Start the hands-free voice loop. Auto-listens for the next instruction after each agent turn. `--manual` disables auto-listen (press Space to listen). |
 | `/voice-check` | Show setup diagnostics and voice-mode status. |
+| `/voice-chatty` | Toggle conversational mode. When on, the agent speaks its responses and thinks out loud. |
 
 Voice panel controls in interactive mode:
 - Space: listen now; press again while listening to stop; if Pi is speaking, stops playback first
@@ -163,7 +164,8 @@ Example config file:
   "silenceThreshold": "1%",
   "ttsSampleRate": 24000,
   "ttsOutputCodec": "wav",
-  "textFallback": true
+  "textFallback": true,
+  "conversational": false
 }
 ```
 
@@ -195,6 +197,7 @@ Supported environment variables:
 - `PI_LISTENS_AUDIO_DIR`
 - `PI_LISTENS_DELETE_AUDIO`
 - `PI_LISTENS_TEXT_FALLBACK`
+- `PI_LISTENS_CONVERSATIONAL` (default `false`; when `true`, the agent speaks its responses conversationally)
 
 ## Notes
 
@@ -202,3 +205,4 @@ Supported environment variables:
 - Streaming input is sent as 16kHz, 16-bit, mono PCM (`pcm_s16le`) with `saaras:v3` by default.
 - macOS may ask for microphone permissions the first time `rec` or `ffmpeg` records audio.
 - Spoken output is intentionally optimized for concise interaction, not for reading code or full agent responses.
+- When `conversational` mode is enabled, the agent speaks most of its responses, thinks out loud, and uses `voice_ask` for all clarification. Toggle at runtime with `/voice-chatty`.

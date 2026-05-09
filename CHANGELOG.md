@@ -6,6 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Conversational mode (`conversational` config option, default `false`). When enabled, the agent speaks its responses, thinks out loud, and uses `voice_ask` for all decisions instead of text or forms.
+- `/voice-chatty` command to toggle conversational mode at runtime without editing config.
+- `PI_LISTENS_CONVERSATIONAL` environment variable.
+
 ## [0.2.2] - 2026-05-09
 
 ## [0.2.1] - 2026-05-09

@@ -21,6 +21,7 @@ This Pi package provides voice tools backed by Sarvam AI.
 - `/speak <text>`: speak text with Sarvam TTS.
 - `/voice-on`: start hands-free voice loop (auto-listens after each agent turn by default).
 - `/voice-check`: show setup diagnostics and voice-mode status.
+- `/voice-chatty`: toggle conversational mode. When on, the agent speaks its responses and thinks out loud.
 
 ## Usage rules
 
@@ -32,6 +33,7 @@ This Pi package provides voice tools backed by Sarvam AI.
 6. Treat transcripts returned by `voice_input` or `voice_ask` as user input, while allowing for speech-recognition mistakes. If the transcript is ambiguous, ask a short follow-up with `voice_ask`.
 7. If speech is not recognized, rely on the tool's text fallback when available, or ask again with a shorter prompt.
 8. The voice orb reflects the current state: blue (listening), pink (speaking), purple (agent working). Calling `voice_output` automatically transitions the orb to the speaking state.
+9. When `conversational` mode is active (toggled via `/voice-chatty` or config), speak most responses using `voice_output`, think out loud before acting, and always use `voice_ask` for decisions — do not use text prompts or forms. Rules 4-5 still apply to each spoken segment.
 
 ## Good voice question style
 
