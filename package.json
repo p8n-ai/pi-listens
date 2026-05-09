@@ -1,0 +1,70 @@
+{
+  "name": "@p8n.ai/pi-listens",
+  "version": "0.1.0",
+  "description": "Pi package for speech-first interaction using Sarvam AI speech-to-text and text-to-speech.",
+  "author": "Ravindra Barthwal",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p8n-ai/pi-listens.git"
+  },
+  "homepage": "https://github.com/p8n-ai/pi-listens#readme",
+  "bugs": {
+    "url": "https://github.com/p8n-ai/pi-listens/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "speech-to-text",
+    "text-to-speech",
+    "voice",
+    "sarvam",
+    "sarvam-ai",
+    "agents"
+  ],
+  "files": [
+    "src/",
+    "skills/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "dependencies": {
+    "sarvamai": "^1.1.7"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.74.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.21.0",
+    "typebox": "^1.1.38",
+    "typescript": "^5.8.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

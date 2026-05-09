@@ -1,0 +1,21 @@
+{
+  "apiKey": "paste-your-sarvam-api-key-here",
+  "sttModel": "saaras:v3",
+  "sttMode": "transcribe",
+  "sttLanguageCode": "unknown",
+  "translateInputToEnglish": true,
+  "ttsModel": "bulbul:v3",
+  "ttsLanguageCode": "en-IN",
+  "ttsSpeaker": "shubh",
+  "recordSeconds": 300,
+  "recordSampleRate": 16000,
+  "streamChunkMs": 250,
+  "streamMaxSeconds": 300,
+  "silenceStartSeconds": 0.2,
+  "silenceStopSeconds": 3.5,
+  "silenceThreshold": "1%",
+  "ttsSampleRate": 24000,
+  "ttsOutputCodec": "wav",
+  "textFallback": true,
+  "autoSpeakAssistant": false
+}
