@@ -5,6 +5,8 @@ All notable changes to `@p8n.ai/pi-listens` will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+## [0.3.0] - 2026-05-10
 ### Added
 
 - Replaced the voice orb panel art with an original ANSI/Unicode character renderer (`Miko`) that has separate idle, listening, agent-working, speaking, and error poses. The character renderer is defined as a reusable character/frame building block for future multi-character support.
@@ -95,7 +97,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Stop active audio capture/playback subprocesses when voice mode is closed or the Pi session shuts down.
 - Clean up generated audio files when spoken playback is interrupted.
 
-[Unreleased]: https://github.com/p8n-ai/pi-listens/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/p8n-ai/pi-listens/compare/v0.3.0...HEAD
 [0.1.0]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.1.0
 [0.1.1]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.1.1
 [0.1.2]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.1.2
@@ -104,3 +106,4 @@ This project follows [Semantic Versioning](https://semver.org/).
 [0.2.2]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.2.2
 [0.2.3]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.2.3
 [0.2.4]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.2.4
+[0.3.0]: https://github.com/p8n-ai/pi-listens/releases/tag/v0.3.0
