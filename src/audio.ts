@@ -128,7 +128,7 @@ export function createAudioRuntime(config: PiListensConfig): AudioRuntime {
 			const task = playbackQueue
 				.catch(() => {}) // don't let prior failures block the queue
 				.then(() => {
-					if (queueGeneration !== gen) return; // queue was interrupted since enqueue
+					if (queueGeneration !== gen) throw new Error("Playback cancelled"); // queue was interrupted since enqueue
 					return fn();
 				});
 			playbackQueue = task;

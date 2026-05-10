@@ -181,12 +181,14 @@ async function listenAndSend(
 		state.listenAbortController?.abort();
 		return;
 	}
-	stopSpeaking(services, state);
 	state.recordSeconds = seconds ?? services.getConfig().recordSeconds;
 	state.silenceStopSeconds = services.getConfig().silenceStopSeconds;
 	state.isListening = true;
 	state.status = "listening";
 	state.lastError = undefined;
+	// Mark listening before touching playback so any just-queued speech sees the
+	// listening state and waits instead of resolving as a skipped "spoke" call.
+	pauseSpeakingForListening(services, state);
 	const listenAbortController = new AbortController();
 	state.listenAbortController = listenAbortController;
 	const listenSignal = combineSignals(ctx.signal, listenAbortController.signal);
@@ -250,6 +252,7 @@ async function playSpeechBest(services: VoiceToolServices, text: string, signal?
 	const audio = services.getAudio();
 	if (audio.describe().streamingPlayer !== "missing") {
 		const result = await services.getSpeech().synthesizeStream(text, signal);
+		await services.waitForListeningIdle?.(signal);
 		await audio.playStream(result.stream, signal);
 		return;
 	}
@@ -259,6 +262,7 @@ async function playSpeechBest(services: VoiceToolServices, text: string, signal?
 	const path = join(config.audioDir, `pi-listens-command-${Date.now()}.${audioExtensionForCodec(config.ttsOutputCodec)}`);
 	try {
 		const result = await services.getSpeech().synthesizeToFile(text, path, signal);
+		await services.waitForListeningIdle?.(signal);
 		await audio.play(result.path, signal);
 	} finally {
 		await audio.cleanup(path);
@@ -320,6 +324,15 @@ function stopSpeaking(services: VoiceToolServices, state: VoiceModeState) {
 	services.getAudio().interruptPlayback();
 }
 
+function pauseSpeakingForListening(services: VoiceToolServices, state: VoiceModeState) {
+	const speakAbortController = state.speakAbortController;
+	state.speakAbortController = undefined;
+	speakAbortController?.abort();
+	services.resetSpeechCount?.();
+	services.notifySpeaking?.(false);
+	services.getAudio().stopPlayback();
+}
+
 export function stopVoiceMode(services: VoiceToolServices, state: VoiceModeState, ctx?: ExtensionContext | ExtensionCommandContext) {
 	state.enabled = false;
 	state.autoListen = false;
@@ -343,9 +356,26 @@ const serviceCtx = new WeakMap<VoiceToolServices, ExtensionContext>();
 
 export function attachStateToServices(services: VoiceToolServices, state: VoiceModeState) {
 	serviceState.set(services, state);
+	services.isListening = () => state.isListening;
+	services.waitForListeningIdle = (signal?: AbortSignal) => waitForListeningIdle(state, signal);
+	services.notifyListening = (listening) => {
+		if (!state.enabled) return;
+		state.isListening = listening;
+		if (listening) {
+			state.status = "listening";
+		} else if (state.status === "listening") {
+			state.status = state.agentActive ? "agent" : "idle";
+		}
+		const ctx = serviceCtx.get(services);
+		if (ctx) applyVoiceChrome(ctx, state);
+	};
 	services.notifySpeaking = (speaking) => {
 		if (!state.enabled) return;
-		if (speaking) {
+		if (state.isListening) {
+			// Listening always wins over speaking in the UI/state machine. Tool-initiated
+			// speech is queued behind listening, so this mostly protects older in-flight calls.
+			state.status = "listening";
+		} else if (speaking) {
 			state.status = "speaking";
 		} else if (state.status === "speaking") {
 			// Go back to agent-working if still mid-turn, idle otherwise
@@ -364,4 +394,31 @@ function getStateFromServices(services: VoiceToolServices): VoiceModeState {
 	const state = serviceState.get(services);
 	if (!state) throw new Error("voice mode state not attached");
 	return state;
+}
+
+async function waitForListeningIdle(state: VoiceModeState, signal?: AbortSignal): Promise<void> {
+	while (state.isListening) {
+		if (signal?.aborted) throw new Error("Cancelled");
+		await delay(50, signal);
+	}
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new Error("Cancelled"));
+			return;
+		}
+		const cleanup = () => signal?.removeEventListener("abort", onAbort);
+		const timeout = setTimeout(() => {
+			cleanup();
+			resolve();
+		}, ms);
+		const onAbort = () => {
+			clearTimeout(timeout);
+			cleanup();
+			reject(new Error("Cancelled"));
+		};
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
 }

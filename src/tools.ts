@@ -14,7 +14,10 @@ export interface VoiceToolServices {
 	getAudio: () => AudioRuntime;
 	getSpeech: () => SarvamSpeechClient;
 	notifySpeaking?: (speaking: boolean) => void;
+	notifyListening?: (listening: boolean) => void;
 	resetSpeechCount?: () => void;
+	isListening?: () => boolean;
+	waitForListeningIdle?: (signal?: AbortSignal) => Promise<void>;
 }
 
 const VoiceOutputParams = Type.Object({
@@ -60,41 +63,54 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		parameters: VoiceOutputParams,
 		async execute(_toolCallId, params: VoiceOutputInput, signal, onUpdate) {
 			const audio = services.getAudio();
-			activeSpeechCount++;
-			services.notifySpeaking?.(true);
-			onUpdate?.({ content: [{ type: "text", text: "Starting streamed speech with Sarvam AI…" }], details: {} });
-			let playbackDetails: Record<string, unknown> = {};
-			const playback = audio.enqueuePlayback(async () => {
-				playbackDetails = await playSpeechBest(params.text, services, signal);
+			const queuedBehindListening = services.isListening?.() === true;
+			onUpdate?.({
+				content: [{ type: "text", text: queuedBehindListening ? "Queued speech until listening finishes…" : "Starting streamed speech with Sarvam AI…" }],
+				details: { queuedBehindListening },
 			});
-			const onPlaybackDone = () => {
+			let playbackDetails: Record<string, unknown> = {};
+			let speechStarted = false;
+			const beginSpeaking = () => {
+				speechStarted = true;
+				activeSpeechCount++;
+				services.notifySpeaking?.(true);
+			};
+			const finishSpeaking = () => {
+				if (!speechStarted) return;
+				speechStarted = false;
 				activeSpeechCount = Math.max(0, activeSpeechCount - 1);
 				if (activeSpeechCount === 0) services.notifySpeaking?.(false);
 			};
+			const playback = audio.enqueuePlayback(async () => {
+				await services.waitForListeningIdle?.(signal);
+				if (signal?.aborted) throw new Error("Cancelled");
+				beginSpeaking();
+				try {
+					playbackDetails = await playSpeechBest(params.text, services, signal);
+				} finally {
+					finishSpeaking();
+				}
+			});
 			if (params.wait_for_playback !== true) {
-				void playback.then(onPlaybackDone, onPlaybackDone);
+				void playback.catch(() => undefined);
 				return {
-					content: [{ type: "text", text: `Started speaking to user: ${params.text}` }],
-					details: { played: "started", text: params.text },
+					content: [{ type: "text", text: `${queuedBehindListening ? "Queued" : "Started"} speaking to user: ${params.text}` }],
+					details: { played: queuedBehindListening ? "queued" : "started", text: params.text, queuedBehindListening },
 				};
 			}
-			onUpdate?.({ content: [{ type: "text", text: "Playing audio…" }], details: {} });
-			try {
-				await playback;
-				return {
-					content: [{ type: "text", text: `Spoke to user: ${params.text}` }],
-					details: { ...playbackDetails, played: true, text: params.text },
-				};
-			} finally {
-				onPlaybackDone();
-			}
+			onUpdate?.({ content: [{ type: "text", text: queuedBehindListening ? "Waiting for listening to finish before playback…" : "Playing audio…" }], details: { queuedBehindListening } });
+			await playback;
+			return {
+				content: [{ type: "text", text: `Spoke to user: ${params.text}` }],
+				details: { ...playbackDetails, played: true, text: params.text, queuedBehindListening },
+			};
 		},
 		renderCall(args: VoiceOutputInput, theme) {
 			return new Text(`${theme.fg("toolTitle", theme.bold("voice_output "))}${theme.fg("muted", quote(args.text))}`, 0, 0);
 		},
 		renderResult(result, _options, theme) {
-			const details = result.details as { text?: string; played?: boolean | "started" } | undefined;
-			const label = details?.played === "started" ? "speaking" : details?.played === false ? "prepared" : "spoke";
+			const details = result.details as { text?: string; played?: boolean | "started" | "queued" } | undefined;
+			const label = details?.played === "queued" ? "queued" : details?.played === "started" ? "speaking" : details?.played === false ? "prepared" : "spoke";
 			return new Text(`${theme.fg("success", "✓")} ${label}${details?.text ? ` ${theme.fg("dim", quote(details.text))}` : ""}`, 0, 0);
 		},
 	});
@@ -136,8 +152,9 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 		async execute(_toolCallId, params: VoiceAskInput, signal, onUpdate, ctx) {
 			onUpdate?.({ content: [{ type: "text", text: "Speaking question…" }], details: {} });
 			const audio = services.getAudio();
-			// Wait for any queued speech to finish before asking the question
+			// Wait for any queued speech and any manual listening turn to finish before asking the question.
 			await audio.waitForPlaybackIdle();
+			await services.waitForListeningIdle?.(signal);
 			services.notifySpeaking?.(true);
 			try {
 				await playSpeechBest(params.question, services, signal);
@@ -210,12 +227,14 @@ async function playSpeechBest(text: string, services: VoiceToolServices, signal?
 	const audio = services.getAudio();
 	if (audio.describe().streamingPlayer !== "missing") {
 		const result = await services.getSpeech().synthesizeStream(text, signal);
+		await services.waitForListeningIdle?.(signal);
 		await audio.playStream(result.stream, signal);
 		return { playback: "stream" };
 	}
 
 	const result = await speakToFile(text, services, signal);
 	try {
+		await services.waitForListeningIdle?.(signal);
 		await audio.play(result.path, signal);
 		return { ...result, playback: "file" };
 	} finally {
@@ -241,10 +260,16 @@ async function listenAndMaybeFallback(
 	const config = services.getConfig();
 	const seconds = clampSeconds(params.seconds ?? config.recordSeconds);
 	onUpdate?.({ content: [{ type: "text", text: `Streaming microphone audio to Sarvam for up to ${seconds}s…` }], details: {} });
-	const result = await services.getSpeech().transcribeMicrophone(services.getAudio(), signal, {
-		seconds,
-		mode: config.translateInputToEnglish ? "translate" : config.sttMode,
-	});
+	services.notifyListening?.(true);
+	let result: TranscriptionResult;
+	try {
+		result = await services.getSpeech().transcribeMicrophone(services.getAudio(), signal, {
+			seconds,
+			mode: config.translateInputToEnglish ? "translate" : config.sttMode,
+		});
+	} finally {
+		services.notifyListening?.(false);
+	}
 	if (result.transcript.trim()) return { ...result, fromTextFallback: false };
 
 	const shouldFallback = params.text_fallback ?? config.textFallback;
