@@ -1,6 +1,8 @@
 import { CustomEditor, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { VoiceModeState } from "./commands.js";
+import { characterBounds, DEFAULT_VOICE_CHARACTER, renderVoiceCharacter, type CharacterInteraction, type VoiceCharacterPalette } from "./characters.js";
+import { renderVoiceCharacterImage } from "./character-images.js";
 
 type EditorFactory = ReturnType<ExtensionContext["ui"]["getEditorComponent"]>;
 
@@ -10,12 +12,11 @@ export interface VoiceUiCallbacks {
 	toggleAutoListen: () => void;
 }
 
-const ORB_WIDTH = 38;
-const ORB_HEIGHT = 18;
+const CHARACTER_BOUNDS = characterBounds(DEFAULT_VOICE_CHARACTER);
+const CHARACTER_WIDTH = CHARACTER_BOUNDS.width;
+const CHARACTER_HEIGHT = CHARACTER_BOUNDS.height;
 const MOUSE_ENABLE = "\x1b[?1000h\x1b[?1006h";
 const MOUSE_DISABLE = "\x1b[?1000l\x1b[?1006l";
-
-type OrbShockwave = { frame: number; x: number; y: number; strength: number };
 type SgrMouseEvent = { button: number; col: number; row: number; pressed: boolean };
 
 export function installVoiceUi(ctx: ExtensionContext, state: VoiceModeState, callbacks: VoiceUiCallbacks) {
@@ -64,7 +65,7 @@ export function applyVoiceChrome(ctx: ExtensionContext, state: VoiceModeState) {
 class VoiceLoopEditor extends CustomEditor {
 	private animationTimer?: ReturnType<typeof setInterval>;
 	private frame = 0;
-	private shockwaves: OrbShockwave[] = [];
+	private interactions: CharacterInteraction[] = [];
 	private lastRenderWidth = 80;
 	private lastRenderLineCount = 0;
 	private mouseEnabled = false;
@@ -88,21 +89,21 @@ class VoiceLoopEditor extends CustomEditor {
 	handleInput(data: string): void {
 		const mouse = parseSgrMouse(data);
 		if (mouse) {
-			if (mouse.pressed && mouse.button === 0) this.triggerMouseOrbClick(mouse);
+			if (mouse.pressed && mouse.button === 0) this.triggerMouseCharacterClick(mouse);
 			return;
 		}
 		if (data === " ") {
-			this.triggerOrbClick(1);
+			this.triggerCharacterClick(1);
 			this.callbacks.startListening();
 			return;
 		}
 		if (data.toLowerCase() === "a") {
-			this.triggerOrbClick(0.65, 0.18, 0.1);
+			this.triggerCharacterClick(0.65, 0.18, 0.1);
 			this.callbacks.toggleAutoListen();
 			return;
 		}
 		if (data.toLowerCase() === "q") {
-			this.triggerOrbClick(0.4, 0, 0.18);
+			this.triggerCharacterClick(0.4, 0, 0.18);
 			this.callbacks.disable();
 			return;
 		}
@@ -122,10 +123,15 @@ class VoiceLoopEditor extends CustomEditor {
 		const lines: string[] = [];
 		const addCentered = (text = "") => lines.push(center(text, width));
 		const palette = paletteForStatus(this.loopState.status);
-		this.shockwaves = this.shockwaves.filter((wave) => this.frame - wave.frame < 40);
+		this.interactions = this.interactions.filter((interaction) => this.frame - interaction.frame < 32);
 
 		lines.push("");
-		for (const orbLine of animatedGlowingOrb(palette, this.loopState.status, this.frame, this.shockwaves)) addCentered(orbLine);
+		const imageLines = renderVoiceCharacterImage(this.loopState.status, width, palette, this.frame);
+		if (imageLines) {
+			lines.push(...imageLines);
+		} else {
+			for (const characterLine of renderVoiceCharacter(DEFAULT_VOICE_CHARACTER, { status: this.loopState.status, frame: this.frame, palette, interactions: this.interactions })) addCentered(characterLine);
+		}
 		addCentered(compactStatus(this.loopState.status, palette, this.frame));
 		addCentered(color(palette.dim, "any language → English"));
 		lines.push("");
@@ -138,21 +144,21 @@ class VoiceLoopEditor extends CustomEditor {
 		return lines;
 	}
 
-	private triggerMouseOrbClick(mouse: SgrMouseEvent): void {
+	private triggerMouseCharacterClick(mouse: SgrMouseEvent): void {
 		const centerCol = Math.max(1, this.lastRenderWidth / 2);
-		let x = clamp((mouse.col - centerCol) / (ORB_WIDTH / 2), -0.95, 0.95);
+		let x = clamp((mouse.col - centerCol) / (CHARACTER_WIDTH / 2), -0.95, 0.95);
 
 		const terminalRows = process.stdout.rows ?? this.lastRenderLineCount;
 		const approximateTop = Math.max(1, terminalRows - this.lastRenderLineCount - 2);
-		const orbCenterRow = approximateTop + 1 + (ORB_HEIGHT - 1) / 2;
-		let y = clamp((mouse.row - orbCenterRow) / ((ORB_HEIGHT - 1) / 2), -0.95, 0.95);
+		const characterCenterRow = approximateTop + 1 + (CHARACTER_HEIGHT - 1) / 2;
+		let y = clamp((mouse.row - characterCenterRow) / ((CHARACTER_HEIGHT - 1) / 2), -0.95, 0.95);
 
 		// Terminal mouse coordinates are global, while the extension API does not expose
 		// the editor's exact row. If the estimate misses, still give a centered response.
 		if (!Number.isFinite(x)) x = 0;
-		if (!Number.isFinite(y) || Math.abs(mouse.row - orbCenterRow) > ORB_HEIGHT) y = 0;
+		if (!Number.isFinite(y) || Math.abs(mouse.row - characterCenterRow) > CHARACTER_HEIGHT) y = 0;
 
-		this.triggerOrbClick(1.25, x, y, true);
+		this.triggerCharacterClick(1.25, x, y, true);
 	}
 
 	private enableMouseInput(): void {
@@ -167,18 +173,18 @@ class VoiceLoopEditor extends CustomEditor {
 		this.mouseEnabled = false;
 	}
 
-	private triggerOrbClick(strength: number, x = 0, y = 0, burst = false): void {
-		this.shockwaves.push({ frame: this.frame, x, y, strength });
+	private triggerCharacterClick(strength: number, x = 0, y = 0, burst = false): void {
+		this.interactions.push({ frame: this.frame, x, y, strength });
 		if (burst) {
-			this.shockwaves.push({ frame: this.frame - 3, x: x * 0.45, y: y * 0.45, strength: strength * 0.55 });
-			this.shockwaves.push({ frame: this.frame - 7, x: -x * 0.28, y: -y * 0.28, strength: strength * 0.32 });
+			this.interactions.push({ frame: this.frame - 3, x: x * 0.45, y: y * 0.45, strength: strength * 0.55 });
+			this.interactions.push({ frame: this.frame - 7, x: -x * 0.28, y: -y * 0.28, strength: strength * 0.32 });
 		}
-		this.shockwaves = this.shockwaves.slice(-8);
+		this.interactions = this.interactions.slice(-8);
 		this.tui.requestRender();
 	}
 }
 
-function compactStatus(status: VoiceModeState["status"], palette: OrbPalette, frame = 0): string {
+function compactStatus(status: VoiceModeState["status"], palette: VoiceCharacterPalette, frame = 0): string {
 	const labels: Record<VoiceModeState["status"], string> = {
 		idle: "ready",
 		listening: "listening",
@@ -189,9 +195,7 @@ function compactStatus(status: VoiceModeState["status"], palette: OrbPalette, fr
 	return shimmer(labels[status], palette, frame);
 }
 
-type OrbPalette = { fg: string; bright: string; soft: string; dim: string };
-
-function paletteForStatus(status: VoiceModeState["status"]): OrbPalette {
+function paletteForStatus(status: VoiceModeState["status"]): VoiceCharacterPalette {
 	switch (status) {
 		case "listening":
 			return { fg: "38;2;80;220;255", bright: "38;2;180;245;255", soft: "38;2;50;140;255", dim: "38;2;24;75;130" };
@@ -206,72 +210,6 @@ function paletteForStatus(status: VoiceModeState["status"]): OrbPalette {
 	}
 }
 
-function animatedGlowingOrb(palette: OrbPalette, status: VoiceModeState["status"], frame: number, shockwaves: OrbShockwave[] = []): string[] {
-	// Amp Neo-inspired dithered glow. The binary exposes its Neo glyph set as:
-	// [" ", ".", "·", "·", ":", ":", "•", "•", "●", "●"].
-	// We render the same style mathematically in Pi's simpler TUI component model.
-	const width = ORB_WIDTH;
-	const height = ORB_HEIGHT;
-	const chars = [" ", ".", "·", "·", ":", ":", "•", "•", "●", "●"];
-	const t = frame / 5;
-	const pulse = 0.08 * Math.sin(t);
-	const rows: string[] = [];
-
-	for (let y = 0; y < height; y++) {
-		let row = "";
-		const ny = (y - (height - 1) / 2) / ((height - 1) / 2);
-		for (let x = 0; x < width; x++) {
-			const nx = (x - (width - 1) / 2) / ((width - 1) / 2);
-			const ellipse = Math.sqrt((nx * nx) / (0.96 + pulse) + (ny * ny) / (0.82 + pulse));
-			if (ellipse > 1.18) {
-				row += " ";
-				continue;
-			}
-
-			const radial = Math.max(0, 1 - ellipse);
-			const rim = Math.max(0, 1 - Math.abs(ellipse - 0.74) * 5.0);
-			const listeningRipple = status === "listening" ? 0.22 * Math.sin(18 * ellipse - t * 3.3) : 0;
-			const speakingWave = status === "speaking" ? 0.2 * Math.sin(x * 0.65 + t * 3.8) : 0;
-			const thinkingSwirl = status === "agent" ? 0.18 * Math.sin(Math.atan2(ny, nx) * 3 + t * 2.2) : 0;
-			const highlight = Math.max(0, 1 - Math.hypot(nx + 0.32 * Math.cos(t), ny - 0.28 * Math.sin(t * 0.8)) * 2.2);
-			const click = sampleClickEffect(nx, ny, frame, shockwaves);
-
-			let intensity = radial * 1.25 + rim * 0.5 + highlight * 0.42 + listeningRipple + speakingWave + thinkingSwirl;
-			intensity = clamp01(intensity + click.ring * 0.92 + click.bloom * 0.52 - click.dent * 0.22);
-			const charIndex = Math.max(0, Math.min(chars.length - 1, Math.round(intensity * (chars.length - 1))));
-			const ch = chars[charIndex] ?? " ";
-			const colorCode = click.ring > 0.28 || intensity > 0.78 ? palette.bright : intensity > 0.46 ? palette.fg : intensity > 0.22 ? palette.soft : palette.dim;
-			row += color(colorCode, ch);
-		}
-		rows.push(row);
-	}
-	return rows;
-}
-
-function sampleClickEffect(nx: number, ny: number, frame: number, shockwaves: OrbShockwave[]): { ring: number; bloom: number; dent: number } {
-	let ring = 0;
-	let bloom = 0;
-	let dent = 0;
-	for (const wave of shockwaves) {
-		const age = frame - wave.frame;
-		if (age < 0 || age > 38) continue;
-		const progress = age / 38;
-		const dx = nx - wave.x;
-		const dy = (ny - wave.y) * 1.18;
-		const dist = Math.hypot(dx, dy);
-		const eased = 1 - (1 - progress) ** 2;
-		const radius = 0.04 + eased * 1.22;
-		const life = (1 - progress) ** 0.64 * wave.strength;
-		ring = Math.max(ring, Math.max(0, 1 - Math.abs(dist - radius) * 10.5) * life);
-		bloom = Math.max(bloom, Math.exp(-(dist * dist) / 0.085) * Math.sin(Math.min(1, progress * 2.2) * Math.PI) * wave.strength);
-		dent = Math.max(dent, Math.exp(-(dist * dist) / 0.025) * Math.max(0, 1 - progress * 2.4) * wave.strength);
-	}
-	return { ring: clamp01(ring), bloom: clamp01(bloom), dent: clamp01(dent) };
-}
-
-function clamp01(value: number): number {
-	return Math.max(0, Math.min(1, value));
-}
 
 function disableTerminalMouseInput(): void {
 	if (process.stdout.isTTY) process.stdout.write(MOUSE_DISABLE);
@@ -292,7 +230,7 @@ function parseSgrMouse(data: string): SgrMouseEvent | undefined {
 	return { button: code & 3, col, row, pressed: match[4] === "M" };
 }
 
-function shimmer(text: string, palette: OrbPalette, frame: number): string {
+function shimmer(text: string, palette: VoiceCharacterPalette, frame: number): string {
 	return [...text].map((ch, index) => color((index + frame) % 6 === 0 ? palette.bright : palette.fg, ch)).join("");
 }
 
@@ -300,7 +238,7 @@ function frameIntervalForStatus(status: VoiceModeState["status"]): number {
 	return status === "listening" ? 80 : status === "speaking" ? 90 : status === "agent" ? 120 : 110;
 }
 
-function controlRail(state: VoiceModeState, palette: OrbPalette, width: number): string[] {
+function controlRail(state: VoiceModeState, palette: VoiceCharacterPalette, width: number): string[] {
 	const listenLabel = state.isListening ? "stop" : "listen";
 	const pills = [
 		controlPill("Space", listenLabel, state.isListening ? "active" : "primary", palette),
@@ -310,7 +248,7 @@ function controlRail(state: VoiceModeState, palette: OrbPalette, width: number):
 	return wrapInline(pills, "  ", Math.max(24, width - 2));
 }
 
-function controlPill(key: string, label: string, tone: "primary" | "active" | "muted" | "danger", palette: OrbPalette): string {
+function controlPill(key: string, label: string, tone: "primary" | "active" | "muted" | "danger", palette: VoiceCharacterPalette): string {
 	const bg = tone === "active" ? "48;2;17;83;91" : tone === "primary" ? "48;2;17;42;72" : tone === "danger" ? "48;2;54;24;36" : "48;2;15;23;42";
 	const keyFg = tone === "danger" ? "38;2;255;190;190" : tone === "muted" ? "38;2;203;213;225" : palette.bright;
 	const labelFg = tone === "muted" ? "38;2;148;163;184" : "38;2;226;232;240";

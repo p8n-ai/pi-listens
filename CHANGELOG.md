@@ -5,6 +5,10 @@ All notable changes to `@p8n.ai/pi-listens` will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+### Added
+
+- Replaced the voice orb panel art with an original ANSI/Unicode character renderer (`Miko`) that has separate idle, listening, agent-working, speaking, and error poses. The character renderer is defined as a reusable character/frame building block for future multi-character support.
+- PNG sprite assets for Miko (generated via Codex `$imagegen`). Terminals with inline image support (Kitty, Ghostty, WezTerm, iTerm2) display the polished PNG sprites; other terminals fall back to the ANSI/Unicode renderer automatically.
 
 ## [0.2.3] - 2026-05-09
 ### Added

@@ -111,17 +111,19 @@ Voice panel controls in interactive mode:
 - Space: listen now; press again while listening to stop; if Pi is speaking, stops playback first
 - A: toggle auto-listen (listen again after each assistant reply)
 - Q: close the panel and stop any active listening or speaking
-- Click the orb: visual ripple feedback (terminals with mouse reporting)
+- Click the character: visual sparkle feedback (terminals with mouse reporting)
 
-The orb animates to reflect the current state:
+The character animates to reflect the current state:
 
-| State | Orb Color | Animation | Status Bar |
+| State | Character Color | Pose | Status Bar |
 | --- | --- | --- | --- |
-| Idle | Teal | Gentle pulse | `voice on` |
-| Listening | Blue | Ripple | `listening…` |
-| Speaking | Pink/Magenta | Wave | `speaking…` |
-| Agent working | Purple | Swirl | `agent working` |
-| Error | Red | — | Shows error message |
+| Idle | Teal | Calm standing pose with a subtle blink | `voice on` |
+| Listening | Blue | Alert eyes, ear pose, and incoming wave lines | `listening…` |
+| Speaking | Pink/Magenta | Open-mouth talking frames with music/sound waves | `speaking…` |
+| Agent working | Purple | Focused face with a small terminal/laptop panel | `agent working` |
+| Error | Red | Concerned face with alert marks | Shows error message |
+
+The current implementation uses ANSI/Unicode sprite frames so it works in ordinary terminals. Pi's TUI also has an `Image` component for Kitty, iTerm2, Ghostty, and WezTerm, so future character packs can experiment with PNG sprites where the terminal supports inline images.
 
 ## Headless/RPC behavior
 
