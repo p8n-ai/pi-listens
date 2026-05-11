@@ -1,6 +1,6 @@
 # @p8n.ai/pi-listens
 
-Speech-first Pi package powered by [Sarvam AI](https://www.sarvam.ai/). It gives Pi tools and commands for:
+Speech-first Pi package with a provider abstraction for speech-to-text (STT) and text-to-speech (TTS). The default bundled provider is [Sarvam AI](https://www.sarvam.ai/), which gives Pi tools and commands for:
 
 - streaming speech-to-text (STT) with Sarvam Saaras (`saaras:v3`) over WebSockets
 - text-to-speech (TTS) with Sarvam Bulbul (`bulbul:v3`)
@@ -20,12 +20,14 @@ Inside Pi, run `/voice-init` to create a global settings file with sensible defa
 /voice-init
 ```
 
-Then open `~/.pi/pi-listens.json` and replace the `apiKey` placeholder with your [Sarvam AI API key](https://dashboard.sarvam.ai).
+Then open `~/.pi/pi-listens.json` and replace the provider credential placeholder with your [Sarvam AI API key](https://dashboard.sarvam.ai).
 
-Alternatively, set the key via environment variable:
+Alternatively, set the provider and key via environment variables:
 
 ```bash
-export SARVAM_API_KEY="your-sarvam-api-key"
+export PI_LISTENS_PROVIDER="sarvam"
+export PI_LISTENS_SARVAM_API_KEY="your-sarvam-api-key"
+# legacy aliases still work: SARVAM_API_KEY or SARVAM_API_SUBSCRIPTION_KEY
 ```
 
 For local development from this checkout:
@@ -38,19 +40,18 @@ pi -e /Users/ravindrabarthwal/Projects/pi-listens
 
 ## System requirements
 
-### Sarvam API key
+### Voice provider credentials
 
-Set one of:
+The bundled provider is Sarvam AI. Set one of:
 
 ```bash
-export SARVAM_API_KEY="..."
-# or
-export SARVAM_API_SUBSCRIPTION_KEY="..."
-# or
 export PI_LISTENS_SARVAM_API_KEY="..."
+# or legacy aliases
+export SARVAM_API_KEY="..."
+export SARVAM_API_SUBSCRIPTION_KEY="..."
 ```
 
-Sarvam's SDK uses the `api-subscription-key` auth model internally; this package uses the official `sarvamai` npm package.
+Sarvam's SDK uses the `api-subscription-key` auth model internally; this package uses the official `sarvamai` npm package inside the Sarvam provider module.
 
 ### Local microphone recorder and audio player
 
@@ -84,11 +85,11 @@ The package registers these tools for Pi's agent:
 
 | Tool | Purpose |
 | --- | --- |
-| `voice_output` | Speak short user-facing text via Sarvam TTS and local playback. |
-| `voice_input` | Stream microphone audio over Sarvam WebSocket STT. |
+| `voice_output` | Speak short user-facing text via the configured TTS provider and local playback. |
+| `voice_input` | Stream microphone audio to the configured STT provider. |
 | `voice_ask` | Speak a concise question, then listen and transcribe the user's answer. |
 | `voice_transcribe_file` | Transcribe an existing audio file. |
-| `voice_setup_check` | Check API key, recorder, player, and model configuration. |
+| `voice_setup_check` | Check provider credentials, recorder, player, and model configuration. |
 
 The extension also injects voice guidance into the system prompt:
 
@@ -102,7 +103,7 @@ The extension also injects voice guidance into the system prompt:
 | Command | Purpose |
 | --- | --- |
 | `/voice-init` | Create a global settings file at `~/.pi/pi-listens.json` with sensible defaults. Use `--overwrite` to replace an existing file. |
-| `/speak <text>` | Speak text with Sarvam TTS. |
+| `/speak <text>` | Speak text with the configured TTS provider. |
 | `/voice-on [--manual] [--no-listen] [seconds]` | Start the hands-free voice loop. Auto-listens for the next instruction after each agent turn. `--manual` disables auto-listen (press Space to listen). |
 | `/voice-check` | Show setup diagnostics and voice-mode status. |
 | `/voice-chatty` | Toggle conversational mode. When on, the agent speaks its responses and thinks out loud. |
@@ -150,6 +151,8 @@ Example config file:
 
 ```json
 {
+  "provider": "sarvam",
+  "sarvamApiKey": "paste-your-sarvam-api-key-here",
   "sttModel": "saaras:v3",
   "sttMode": "transcribe",
   "sttLanguageCode": "unknown",
@@ -173,7 +176,9 @@ Example config file:
 
 Supported environment variables:
 
-- `SARVAM_API_KEY` / `SARVAM_API_SUBSCRIPTION_KEY` / `PI_LISTENS_SARVAM_API_KEY`
+- `PI_LISTENS_PROVIDER` (`sarvam` by default)
+- `PI_LISTENS_SARVAM_API_KEY` (preferred for the bundled Sarvam provider)
+- `SARVAM_API_KEY` / `SARVAM_API_SUBSCRIPTION_KEY` (legacy aliases for the Sarvam provider key)
 - `PI_LISTENS_STT_MODEL`
 - `PI_LISTENS_STT_MODE` (`transcribe`, `translate`, `verbatim`, `translit`, `codemix`)
 - `PI_LISTENS_STT_LANGUAGE` (default `unknown`)
@@ -201,9 +206,13 @@ Supported environment variables:
 - `PI_LISTENS_TEXT_FALLBACK`
 - `PI_LISTENS_CONVERSATIONAL` (default `false`; when `true`, the agent speaks its responses conversationally)
 
+## Provider architecture
+
+The extension code talks to a generic `VoiceProvider` interface for microphone transcription, file transcription, file synthesis, and streamed synthesis. Sarvam-specific WebSocket and SDK logic lives in `src/providers/sarvam.ts`; provider selection and routing live in `src/providers/index.ts`. To add another STT/TTS provider later, add a provider module that implements the interface and register it in the provider router.
+
 ## Notes
 
-- Sarvam STT uses the WebSocket streaming API for microphone input, not the 30-second synchronous REST endpoint.
+- The bundled Sarvam provider uses the WebSocket streaming API for microphone input, not the 30-second synchronous REST endpoint.
 - Streaming input is sent as 16kHz, 16-bit, mono PCM (`pcm_s16le`) with `saaras:v3` by default.
 - macOS may ask for microphone permissions the first time `rec` or `ffmpeg` records audio.
 - Spoken output is intentionally optimized for concise interaction, not for reading code or full agent responses.

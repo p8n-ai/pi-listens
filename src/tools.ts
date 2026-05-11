@@ -6,13 +6,13 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import type { AudioRuntime } from "./audio.js";
 import { audioExtensionForCodec, type PiListensConfig } from "./config.js";
-import type { SarvamSpeechClient, TranscriptionResult } from "./sarvam.js";
+import type { TranscriptionResult, VoiceProvider } from "./providers/index.js";
 import { conciseTranscript } from "./text.js";
 
 export interface VoiceToolServices {
 	getConfig: () => PiListensConfig;
 	getAudio: () => AudioRuntime;
-	getSpeech: () => SarvamSpeechClient;
+	getSpeech: () => VoiceProvider;
 	notifySpeaking?: (speaking: boolean) => void;
 	notifyListening?: (listening: boolean) => void;
 	resetSpeechCount?: () => void;
@@ -37,7 +37,7 @@ const VoiceAskParams = Type.Object({
 });
 
 const VoiceTranscribeParams = Type.Object({
-	path: Type.String({ description: "Path to an audio file to transcribe with Sarvam AI." }),
+	path: Type.String({ description: "Path to an audio file to transcribe with the configured speech-to-text provider." }),
 });
 
 const SetupCheckParams = Type.Object({});
@@ -54,8 +54,8 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 	pi.registerTool({
 		name: "voice_output",
 		label: "Voice Output",
-		description: "Speak a short message to the user using Sarvam AI text-to-speech and local audio playback.",
-		promptSnippet: "Speak short user-facing messages with Sarvam AI TTS",
+		description: "Speak a short message to the user using the configured text-to-speech provider and local audio playback.",
+		promptSnippet: "Speak short user-facing messages with voice TTS",
 		promptGuidelines: [
 			"Use voice_output only when a spoken user-facing message matters, especially before waiting for voice input.",
 			"Keep voice_output to 1-2 short conversational sentences. Do not speak headings, hashtags, bullet lists, boilerplate recaps, code, command output, stack traces, or long explanations.",
@@ -65,7 +65,7 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 			const audio = services.getAudio();
 			const queuedBehindListening = services.isListening?.() === true;
 			onUpdate?.({
-				content: [{ type: "text", text: queuedBehindListening ? "Queued speech until listening finishes…" : "Starting streamed speech with Sarvam AI…" }],
+				content: [{ type: "text", text: queuedBehindListening ? "Queued speech until listening finishes…" : `Starting streamed speech with ${services.getSpeech().name}…` }],
 				details: { queuedBehindListening },
 			});
 			let playbackDetails: Record<string, unknown> = {};
@@ -118,8 +118,8 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 	pi.registerTool({
 		name: "voice_input",
 		label: "Voice Input",
-		description: "Listen to the user's microphone, transcribe speech with Sarvam AI, and return the transcript. Use only after the user knows you are listening.",
-		promptSnippet: "Listen to microphone and transcribe user speech with Sarvam AI STT",
+		description: "Listen to the user's microphone, transcribe speech with the configured speech-to-text provider, and return the transcript. Use only after the user knows you are listening.",
+		promptSnippet: "Listen to microphone and transcribe user speech with voice STT",
 		promptGuidelines: [
 			"Use voice_input only after the user has been told you are listening; if you need to ask a question, prefer voice_ask.",
 			"Treat voice_input transcripts as user input. If the transcript is empty, ask again or provide a text fallback.",
@@ -142,7 +142,7 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 	pi.registerTool({
 		name: "voice_ask",
 		label: "Voice Ask",
-		description: "Speak a question with Sarvam AI TTS, then listen to the microphone and transcribe the user's answer with Sarvam AI STT.",
+		description: "Speak a question with the configured text-to-speech provider, then listen to the microphone and transcribe the user's answer.",
 		promptSnippet: "Ask the user a spoken question and listen for the answer",
 		promptGuidelines: [
 			"Use voice_ask whenever you need clarification, confirmation, or any user input in a voice-first session; do not ask only in text.",
@@ -184,7 +184,7 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 	pi.registerTool({
 		name: "voice_transcribe_file",
 		label: "Voice Transcribe File",
-		description: "Transcribe an existing audio file with Sarvam AI speech-to-text.",
+		description: "Transcribe an existing audio file with the configured speech-to-text provider.",
 		parameters: VoiceTranscribeParams,
 		async execute(_toolCallId, params: VoiceTranscribeInput, signal) {
 			const path = params.path.startsWith("@") ? params.path.slice(1) : params.path;
@@ -196,28 +196,30 @@ export function registerVoiceTools(pi: ExtensionAPI, services: VoiceToolServices
 	pi.registerTool({
 		name: "voice_setup_check",
 		label: "Voice Setup Check",
-		description: "Check pi-listens Sarvam AI key, microphone recorder, audio player, and default voice settings.",
+		description: "Check pi-listens provider credentials, microphone recorder, audio player, and default voice settings.",
 		parameters: SetupCheckParams,
 		async execute() {
 			const config = services.getConfig();
 			const audio = services.getAudio().describe();
-			const ok = Boolean(config.apiKey) && audio.recorder !== "missing" && audio.player !== "missing";
+			const provider = services.getSpeech().describe();
+			const ok = provider.authConfigured && audio.recorder !== "missing" && audio.player !== "missing";
 			return {
 				content: [
 					{
 						type: "text",
 						text: [
 							ok ? "pi-listens setup looks ready." : "pi-listens setup needs attention.",
-							`Sarvam API key: ${config.apiKey ? "set" : "missing"}`,
+							`Provider: ${provider.name}`,
+							`${provider.authLabel}: ${provider.authStatus}`,
 							`Recorder: ${audio.recorder}`,
 							`Player: ${audio.player}`,
 							`Streaming player: ${audio.streamingPlayer}`,
-							`STT: ${config.sttModel} (${config.translateInputToEnglish ? "translate→English" : config.sttMode}, ${config.sttLanguageCode})`,
-							`TTS: ${config.ttsModel} (${config.ttsLanguageCode}, speaker ${config.ttsSpeaker})`,
+							`STT: ${provider.sttSummary}`,
+							`TTS: ${provider.ttsSummary}`,
 						].join("\n"),
 					},
 				],
-				details: { ok, config: { ...config, apiKey: config.apiKey ? "set" : "missing" }, audio },
+				details: { ok, provider, config: redactConfig(config), audio },
 			};
 		},
 	});
@@ -259,7 +261,7 @@ async function listenAndMaybeFallback(
 ): Promise<TranscriptionResult & { audioPath?: string; fromTextFallback: boolean }> {
 	const config = services.getConfig();
 	const seconds = clampSeconds(params.seconds ?? config.recordSeconds);
-	onUpdate?.({ content: [{ type: "text", text: `Streaming microphone audio to Sarvam for up to ${seconds}s…` }], details: {} });
+	onUpdate?.({ content: [{ type: "text", text: `Streaming microphone audio to ${services.getSpeech().name} for up to ${seconds}s…` }], details: {} });
 	services.notifyListening?.(true);
 	let result: TranscriptionResult;
 	try {
@@ -302,6 +304,15 @@ function transcriptResult(
 			question: result.question,
 		},
 	};
+}
+
+function redactConfig(config: PiListensConfig): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(config).map(([key, value]) => [
+			key,
+			/(?:apiKey|token|secret|credential)$/i.test(key) && value ? "set" : value,
+		]),
+	);
 }
 
 function clampSeconds(seconds: number): number {

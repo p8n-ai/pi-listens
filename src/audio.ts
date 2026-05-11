@@ -262,8 +262,10 @@ function detectPlayer(): string | null {
 }
 
 function detectStreamingPlayer(): string | null {
-	if (isCommandAvailable("ffplay")) return "ffplay";
+	// SoX `play` tends to start consuming piped TTS audio with less probing/buffering
+	// than ffplay. Prefer it for lower perceived voice_output latency when present.
 	if (isCommandAvailable("play")) return "play";
+	if (isCommandAvailable("ffplay")) return "ffplay";
 	if (isCommandAvailable("aplay")) return "aplay";
 	return null;
 }
@@ -414,7 +416,7 @@ async function pipeStreamToCommand(stream: ReadableStream<Uint8Array>, command: 
 
 function streamingPlayerCommand(player: string, codec: PiListensConfig["ttsOutputCodec"], sampleRate: number): CommandSpec {
 	if (player === "ffplay") {
-		const args = ["-nodisp", "-autoexit", "-loglevel", "error"];
+		const args = ["-nodisp", "-autoexit", "-loglevel", "error", "-fflags", "nobuffer", "-flags", "low_delay", "-probesize", "32", "-analyzeduration", "0"];
 		if (codec === "linear16") args.push("-f", "s16le", "-ar", String(sampleRate), "-ac", "1");
 		if (codec === "mulaw") args.push("-f", "mulaw", "-ar", String(sampleRate), "-ac", "1");
 		if (codec === "alaw") args.push("-f", "alaw", "-ar", String(sampleRate), "-ac", "1");

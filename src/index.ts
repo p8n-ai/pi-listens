@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createAudioRuntime, type AudioRuntime } from "./audio.js";
-import { maskSecret, resolveConfig, type PiListensConfig } from "./config.js";
-import { SarvamSpeechClient } from "./sarvam.js";
+import { resolveConfig, type PiListensConfig } from "./config.js";
+import { createVoiceProvider } from "./providers/index.js";
 import { attachStateToServices, maybeContinueVoiceLoop, registerVoiceCommands, stopVoiceMode, updateServiceContext, type VoiceModeState } from "./commands.js";
 import { registerVoiceTools, type VoiceToolServices } from "./tools.js";
 import { applyVoiceChrome } from "./voice-ui.js";
@@ -11,7 +11,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 	let audio: AudioRuntime = createAudioRuntime(config);
 	let lastCwd = process.cwd();
 
-	const speech = new SarvamSpeechClient(() => config);
+	const speech = createVoiceProvider(() => config);
 	const state: VoiceModeState = {
 		enabled: false,
 		autoListen: false,
@@ -44,13 +44,16 @@ export default function piListensExtension(pi: ExtensionAPI) {
 		reloadConfig(ctx.cwd);
 		updateServiceContext(services, ctx);
 		const audioInfo = audio.describe();
-		const ready = Boolean(config.apiKey) && audioInfo.recorder !== "missing" && audioInfo.player !== "missing";
+		const provider = speech.describe();
+		const ready = provider.authConfigured && audioInfo.recorder !== "missing" && audioInfo.player !== "missing";
 		ctx.ui.setStatus("pi-listens", state.enabled ? "voice on" : ready ? "voice ready" : "voice setup needed");
+		if (ready && config.conversational) void speech.prewarmTts?.(ctx.signal).catch(() => undefined);
 		if (!ready) {
 			ctx.ui.notify(
 				[
 					"pi-listens is loaded but not fully ready.",
-					`Sarvam API key: ${maskSecret(config.apiKey)}`,
+					`Provider: ${provider.name}`,
+					`${provider.authLabel}: ${provider.authStatus}`,
 					`Recorder: ${audioInfo.recorder}`,
 					`Player: ${audioInfo.player}`,
 					"Run /voice-init to create a settings file, or /voice-check for details.",
@@ -96,7 +99,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 function buildDefaultVoicePrompt(): string {
 	return [
 		"Pi Listens voice guidance:",
-		"- The user may primarily interact by speech through Sarvam AI. Text input is still possible.",
+		"- The user may primarily interact by speech through the configured Pi Listens voice provider. Text input is still possible.",
 		"- When voice mode is active, treat it as a hands-free conversation: listen only while the voice UI/input tool is active, then pause listening while you work.",
 		"- Use voice_output only for concise spoken progress, completion, or status updates that matter to the user.",
 		"- Spoken replies must be brief: 1-2 short sentences, no headings, no hashtags, no bullet lists, no boilerplate recap, and no full task summaries. Leave details in text.",
@@ -109,7 +112,7 @@ function buildDefaultVoicePrompt(): string {
 function buildConversationalPrompt(): string {
 	return [
 		"Pi Listens voice guidance (conversational mode):",
-		"- The user is interacting by voice through Sarvam AI. This is a spoken conversation — respond as a natural, helpful human colleague would.",
+		"- The user is interacting by voice through Pi Listens. This is a spoken conversation — respond as a natural, helpful human colleague would.",
 		"- SPEAK your responses using voice_output. Do not just write text and stay silent — the user expects to hear you.",
 		"- Break longer responses into multiple short voice_output calls (1-3 sentences each) rather than one long block. This feels more natural.",
 		"- When you have options, ideas, or suggestions, talk through them conversationally. Do not present numbered lists — discuss them like a colleague would.",

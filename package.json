@@ -1,7 +1,7 @@
 {
   "name": "@p8n.ai/pi-listens",
   "version": "0.3.0",
-  "description": "Pi package for speech-first interaction using Sarvam AI speech-to-text and text-to-speech.",
+  "description": "Pi package for speech-first interaction with pluggable STT/TTS providers, defaulting to Sarvam AI.",
   "author": "Ravindra Barthwal",
   "license": "MIT",
   "type": "module",
