@@ -185,13 +185,22 @@ export class SarvamVoiceProvider implements VoiceProvider {
 	prewarmTts(signal?: AbortSignal): Promise<void> {
 		if (this.prewarmPromise) return this.prewarmPromise;
 		this.prewarmPromise = (async () => {
-			const result = await this.synthesizeStream("Hi", signal);
-			const reader = result.stream.getReader();
+			const timeout = new AbortController();
+			const timer = setTimeout(() => timeout.abort(), 10_000);
+			timer.unref?.();
+			const prewarmSignal = combineSignals(signal, timeout.signal);
 			try {
-				await reader.read();
-				await reader.cancel().catch(() => undefined);
+				const result = await this.synthesizeStream("Hi", prewarmSignal.signal);
+				const reader = result.stream.getReader();
+				try {
+					await reader.read();
+					await reader.cancel().catch(() => undefined);
+				} finally {
+					reader.releaseLock();
+				}
 			} finally {
-				reader.releaseLock();
+				clearTimeout(timer);
+				prewarmSignal.cleanup();
 			}
 		})().catch((error) => {
 			this.prewarmPromise = null;
