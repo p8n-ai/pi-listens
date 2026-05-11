@@ -41,4 +41,6 @@ export interface VoiceProvider {
 	transcribeFile(path: string, signal?: AbortSignal, options?: TranscriptionOptions): Promise<TranscriptionResult>;
 	synthesizeToFile(text: string, path: string, signal?: AbortSignal): Promise<SynthesisResult>;
 	synthesizeStream(text: string, signal?: AbortSignal): Promise<SynthesisStreamResult>;
+	/** Optionally warm provider-side TTS connections/models before the first audible response. */
+	prewarmTts?(signal?: AbortSignal): Promise<void>;
 }

@@ -32,6 +32,7 @@ type StreamingSocket = {
 export class SarvamVoiceProvider implements VoiceProvider {
 	private client: SarvamAIClient | null = null;
 	private clientKey: string | null = null;
+	private prewarmPromise: Promise<void> | null = null;
 
 	constructor(private readonly getConfig: () => PiListensConfig) {}
 
@@ -179,6 +180,24 @@ export class SarvamVoiceProvider implements VoiceProvider {
 		const stream = response.stream();
 		if (!stream) throw new Error("Sarvam TTS response did not include a readable audio stream");
 		return { stream };
+	}
+
+	prewarmTts(signal?: AbortSignal): Promise<void> {
+		if (this.prewarmPromise) return this.prewarmPromise;
+		this.prewarmPromise = (async () => {
+			const result = await this.synthesizeStream("Hi", signal);
+			const reader = result.stream.getReader();
+			try {
+				await reader.read();
+				await reader.cancel().catch(() => undefined);
+			} finally {
+				reader.releaseLock();
+			}
+		})().catch((error) => {
+			this.prewarmPromise = null;
+			throw error;
+		});
+		return this.prewarmPromise;
 	}
 
 	private async withStreamingSocket(

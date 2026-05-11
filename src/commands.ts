@@ -55,6 +55,7 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 			installVoiceUi(ctx, state, createVoiceUiCallbacks(pi, services, state, ctx));
 			applyVoiceChrome(ctx, state);
 			ctx.ui.notify("Voice mode enabled. Press Q in the voice panel to close it.", "info");
+			prewarmVoiceProvider(services, ctx.signal);
 			if (!args.includes("--no-listen")) await listenAndSend(pi, services, ctx, parseSeconds(args));
 		},
 	});
@@ -141,6 +142,10 @@ async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandCo
 		].join("\n"),
 		"info",
 	);
+}
+
+function prewarmVoiceProvider(services: VoiceToolServices, signal?: AbortSignal) {
+	void services.getSpeech().prewarmTts?.(signal).catch(() => undefined);
 }
 
 function providerHasConfiguredCredential(config: Record<string, unknown>, template: Record<string, unknown>): boolean {

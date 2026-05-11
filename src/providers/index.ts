@@ -41,6 +41,10 @@ class VoiceProviderRouter implements VoiceProvider {
 		return this.active().synthesizeStream(...args);
 	}
 
+	prewarmTts(signal?: AbortSignal): Promise<void> {
+		return this.active().prewarmTts?.(signal) ?? Promise.resolve();
+	}
+
 	private active(): VoiceProvider {
 		const providerName = this.getConfig().provider;
 		if (!this.activeProvider || this.activeName !== providerName) {

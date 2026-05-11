@@ -47,6 +47,7 @@ export default function piListensExtension(pi: ExtensionAPI) {
 		const provider = speech.describe();
 		const ready = provider.authConfigured && audioInfo.recorder !== "missing" && audioInfo.player !== "missing";
 		ctx.ui.setStatus("pi-listens", state.enabled ? "voice on" : ready ? "voice ready" : "voice setup needed");
+		if (ready && config.conversational) void speech.prewarmTts?.(ctx.signal).catch(() => undefined);
 		if (!ready) {
 			ctx.ui.notify(
 				[
