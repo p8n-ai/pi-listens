@@ -5,20 +5,20 @@ description: Use when interacting with the user by voice through @p8n.ai/pi-list
 
 # Pi Listens Voice Interaction
 
-This Pi package provides voice tools backed by Sarvam AI.
+This Pi package provides voice tools backed by a pluggable voice provider. The bundled default provider is Sarvam AI.
 
 ## Tools
 
-- `voice_output`: speak a short message to the user with Sarvam TTS.
-- `voice_input`: listen to the microphone and transcribe the user's speech.
+- `voice_output`: speak a short message to the user with the configured TTS provider.
+- `voice_input`: listen to the microphone and transcribe the user's speech with the configured STT provider.
 - `voice_ask`: speak a concise question, then listen and transcribe the answer.
 - `voice_transcribe_file`: transcribe an existing audio file.
 - `voice_setup_check`: diagnose API key, recorder, player, and voice settings.
 
 ## Commands
 
-- `/voice-init`: create a global settings file with defaults. User only needs to set their Sarvam API key.
-- `/speak <text>`: speak text with Sarvam TTS.
+- `/voice-init`: create a global settings file with defaults. User only needs to set their provider API key.
+- `/speak <text>`: speak text with the configured TTS provider.
 - `/voice-on`: start hands-free voice loop (auto-listens after each agent turn by default).
 - `/voice-check`: show setup diagnostics and voice-mode status.
 - `/voice-chatty`: toggle conversational mode. When on, the agent speaks its responses and thinks out loud.

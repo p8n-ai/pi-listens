@@ -3,10 +3,14 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export type SttMode = "transcribe" | "translate" | "verbatim" | "translit" | "codemix";
+export type VoiceProviderName = "sarvam";
 export type RecordMode = "utterance" | "fixed";
 
 export interface PiListensConfig {
+	provider: VoiceProviderName;
+	/** Legacy alias for the default provider key. Prefer provider-specific keys such as sarvamApiKey. */
 	apiKey?: string;
+	sarvamApiKey?: string;
 	sttModel: string;
 	sttMode: SttMode;
 	sttLanguageCode: string;
@@ -36,6 +40,7 @@ export interface PiListensConfig {
 }
 
 const DEFAULT_CONFIG: PiListensConfig = {
+	provider: "sarvam",
 	sttModel: "saaras:v3",
 	sttMode: "transcribe",
 	sttLanguageCode: "unknown",
@@ -74,7 +79,9 @@ export function resolveConfig(cwd: string): PiListensConfig {
 	};
 
 	const envConfig: RawConfig = {
+		provider: parseProvider(env("PI_LISTENS_PROVIDER")),
 		apiKey: env("SARVAM_API_KEY") ?? env("SARVAM_API_SUBSCRIPTION_KEY") ?? env("PI_LISTENS_SARVAM_API_KEY"),
+		sarvamApiKey: env("PI_LISTENS_SARVAM_API_KEY") ?? env("SARVAM_API_KEY") ?? env("SARVAM_API_SUBSCRIPTION_KEY"),
 		sttModel: env("PI_LISTENS_STT_MODEL"),
 		sttMode: parseSttMode(env("PI_LISTENS_STT_MODE")),
 		sttLanguageCode: env("PI_LISTENS_STT_LANGUAGE"),
@@ -140,6 +147,11 @@ function parseNumber(value: string | undefined): number | undefined {
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parseProvider(value: string | undefined): VoiceProviderName | undefined {
+	if (!value) return undefined;
+	return value === "sarvam" ? value : undefined;
+}
+
 function parseSttMode(value: string | undefined): SttMode | undefined {
 	if (!value) return undefined;
 	const allowed = new Set(["transcribe", "translate", "verbatim", "translit", "codemix"]);
@@ -167,11 +179,6 @@ function mergeDefined(...configs: RawConfig[]): PiListensConfig {
 	return merged as unknown as PiListensConfig;
 }
 
-export function maskSecret(value: string | undefined): string {
-	if (!value) return "not set";
-	if (value.length <= 8) return "set";
-	return `${value.slice(0, 4)}…${value.slice(-4)}`;
-}
 
 export function audioExtensionForCodec(codec: PiListensConfig["ttsOutputCodec"]): string {
 	if (codec === "linear16" || codec === "mulaw" || codec === "alaw") return "raw";

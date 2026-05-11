@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { VoiceToolServices } from "./tools.js";
 import { conciseTranscript } from "./text.js";
-import { audioExtensionForCodec, maskSecret } from "./config.js";
+import { audioExtensionForCodec } from "./config.js";
 import { applyVoiceChrome, installVoiceUi, uninstallVoiceUi } from "./voice-ui.js";
 
 export type VoiceLoopStatus = "idle" | "listening" | "agent" | "speaking" | "error";
@@ -36,7 +36,7 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 	});
 
 	pi.registerCommand("speak", {
-		description: "Speak text with Sarvam AI TTS",
+		description: "Speak text with the configured voice TTS provider",
 		handler: async (args, ctx) => {
 			const text = args.trim();
 			if (!text) {
@@ -61,21 +61,23 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 
 
 	pi.registerCommand("voice-check", {
-		description: "Check pi-listens setup: Sarvam AI key, recorder, player, and voice-mode status",
+		description: "Check pi-listens setup: provider credentials, recorder, player, and voice-mode status",
 		handler: async (_args, ctx) => {
 			const config = services.getConfig();
 			const audio = services.getAudio().describe();
-			const ready = Boolean(config.apiKey) && audio.recorder !== "missing" && audio.player !== "missing";
+			const provider = services.getSpeech().describe();
+			const ready = provider.authConfigured && audio.recorder !== "missing" && audio.player !== "missing";
 			ctx.ui.notify(
 				[
 					ready ? "✓ pi-listens is ready." : "⚠ pi-listens needs attention.",
 					"",
-					`Sarvam API key: ${maskSecret(config.apiKey)}`,
+					`Provider: ${provider.name}`,
+					`${provider.authLabel}: ${provider.authStatus}`,
 					`Recorder: ${audio.recorder}`,
 					`Player: ${audio.player}`,
 					`Streaming player: ${audio.streamingPlayer}`,
-					`STT: ${config.sttModel} (${config.translateInputToEnglish ? "translate→English" : config.sttMode}, ${config.sttLanguageCode})`,
-					`TTS: ${config.ttsModel} (${config.ttsLanguageCode}, speaker ${config.ttsSpeaker})`,
+					`STT: ${provider.sttSummary}`,
+					`TTS: ${provider.ttsSummary}`,
 					"",
 					`Voice mode: ${state.enabled ? "on" : "off"}`,
 					`Auto-listen: ${state.autoListen ? "on" : "off"}`,
@@ -97,27 +99,6 @@ export function registerVoiceCommands(pi: ExtensionAPI, services: VoiceToolServi
 	});
 }
 
-const INIT_SETTINGS_TEMPLATE = {
-	apiKey: "paste-your-sarvam-api-key-here",
-	sttModel: "saaras:v3",
-	sttMode: "transcribe",
-	sttLanguageCode: "unknown",
-	translateInputToEnglish: true,
-	ttsModel: "bulbul:v3",
-	ttsLanguageCode: "en-IN",
-	ttsSpeaker: "shubh",
-	recordSeconds: 300,
-	recordSampleRate: 16000,
-	streamChunkMs: 250,
-	streamMaxSeconds: 300,
-	silenceStartSeconds: 0.2,
-	silenceStopSeconds: 3.5,
-	silenceThreshold: "1%",
-	ttsSampleRate: 24000,
-	ttsOutputCodec: "wav",
-	textFallback: true,
-	conversational: false,
-};
 
 async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandContext, overwrite: boolean) {
 	const dir = join(homedir(), ".pi");
@@ -127,11 +108,12 @@ async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandCo
 		const existing = readFileSync(filePath, "utf8");
 		let parsed: Record<string, unknown> = {};
 		try { parsed = JSON.parse(existing) as Record<string, unknown>; } catch { /* ignore */ }
-		const hasKey = typeof parsed.apiKey === "string" && parsed.apiKey !== "paste-your-sarvam-api-key-here" && parsed.apiKey.length > 0;
+		const provider = services.getSpeech().describe();
+		const hasCredential = providerHasConfiguredCredential(parsed, provider.configTemplate);
 		ctx.ui.notify(
 			[
 				`Settings file already exists: ${filePath}`,
-				hasKey ? "Sarvam API key: set" : "Sarvam API key: not yet configured",
+				`${provider.authLabel}: ${hasCredential ? "set" : "not yet configured"}`,
 				"",
 				"Use /voice-init --overwrite to replace it with fresh defaults.",
 			].join("\n"),
@@ -141,15 +123,15 @@ async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandCo
 	}
 
 	await mkdir(dir, { recursive: true });
-	await writeFile(filePath, `${JSON.stringify(INIT_SETTINGS_TEMPLATE, null, 2)}\n`, "utf8");
+	const provider = services.getSpeech().describe();
+	await writeFile(filePath, `${JSON.stringify(provider.configTemplate, null, 2)}\n`, "utf8");
 
 	const audio = services.getAudio().describe();
 	ctx.ui.notify(
 		[
 			`✓ Created settings file: ${filePath}`,
 			"",
-			"Next step: open the file and replace the apiKey value with your Sarvam AI API key.",
-			"Get a key at: https://dashboard.sarvam.ai",
+			...provider.setupInstructions,
 			"",
 			`Recorder: ${audio.recorder}`,
 			`Player: ${audio.player}`,
@@ -159,6 +141,20 @@ async function initSettings(services: VoiceToolServices, ctx: ExtensionCommandCo
 		].join("\n"),
 		"info",
 	);
+}
+
+function providerHasConfiguredCredential(config: Record<string, unknown>, template: Record<string, unknown>): boolean {
+	const credentialKeys = new Set([
+		"apiKey",
+		...Object.keys(template).filter((key) => /(?:apiKey|token|secret|credential)$/i.test(key)),
+	]);
+	for (const key of credentialKeys) {
+		const value = config[key];
+		if (typeof value !== "string" || !value.trim()) continue;
+		if (value === template[key]) continue;
+		return true;
+	}
+	return false;
 }
 export async function maybeContinueVoiceLoop(pi: ExtensionAPI, services: VoiceToolServices, state: VoiceModeState, ctx: ExtensionContext) {
 	if (!state.enabled || state.isListening) return;
